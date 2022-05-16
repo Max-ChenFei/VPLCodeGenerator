@@ -1,0 +1,24 @@
+from test_data import package_example
+from VPLCodeGenerator.inspect import safe_getattr, get_allattr
+
+
+def test_safe_getattr_when_attr_exist():
+    value = safe_getattr(package_example, 'name')
+    assert value == package_example.name
+
+
+def test_safe_getattr_when_attr_not_exist():
+    default_value = None
+    value = safe_getattr(package_example, 'address', default_value)
+    assert value is default_value
+
+
+def test_get_allattr_when_all_attr_exist():
+    value = get_allattr(package_example)
+    assert value == package_example.__all__
+
+
+def test_get_allattr_when_all_attr_not_exist():
+    value = get_allattr(package_example.subpackage)
+    assert value is None
+
