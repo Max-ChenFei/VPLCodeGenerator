@@ -1,4 +1,4 @@
-name: continuous integration
+name: test
 on: [ push, pull_request ]
 
 permissions:
