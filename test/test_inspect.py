@@ -1,5 +1,5 @@
 from test_data import package_example
-from VPLCodeGenerator.inspect import safe_getattr, get_allattr
+from VPLCodeGenerator.inspect_util import safe_getattr, get_allattr
 
 
 def test_safe_getattr_when_attr_exist():
