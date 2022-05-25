@@ -48,10 +48,12 @@ def safe_getdoc(obj: Any) -> str:
     .. https://github.com/mitmproxy/pdoc/blob/main/pdoc/doc.py#L1140-L1148
     """
     try:
-        return inspect.getdoc(obj) or ''
+        doc = inspect.getdoc(obj) or ''
     except Exception as e:
         warnings.warn(f"inspect.getdoc({obj!r}) raised an exception: {e!r}")
         return ""
+    else:
+        return doc.strip()
 
 
 def get_allattr(obj: ModuleType) -> Any:
