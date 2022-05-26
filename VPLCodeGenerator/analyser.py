@@ -34,7 +34,7 @@ from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
 from typing import Any, ClassVar, Generic, TypeVar, Union
-from inspect_util import safe_getattr, safe_getdoc
+from inspect_util import safe_getattr, safe_getdoc, is_package
 from pdoc import doc_ast, doc_pyi, extract
 from pdoc.doc_types import (
     GenericAlias,
@@ -389,14 +389,7 @@ class Module(Namespace[types.ModuleType]):
 
     @cached_property
     def is_package(self) -> bool:
-        """
-        `True` if the module is a package, `False` otherwise.
-
-        Packages are a special kind of module that may have submodules.
-        Typically, this means that this file is in a directory named like the
-        module with the name `__init__.py`.
-        """
-        return safe_getattr(self.obj, "__path__", None) is not None
+        return is_package(self.obj)
 
     @cached_property
     def _var_docstrings(self) -> dict[str, str]:
@@ -432,7 +425,7 @@ class Module(Namespace[types.ModuleType]):
 
     @cached_property
     def submodules(self) -> list[Module]:
-        """A list of all (direct) submodules."""
+        """A list of all (direct) subdir."""
         if not self.is_package:
             return []
 
@@ -473,52 +466,52 @@ class Module(Namespace[types.ModuleType]):
 
     @cached_property
     def _member_objects(self) -> dict[str, Any]:
-        members = {}
-
-        all = safe_getattr(self.obj, "__all__", False)
-        if all:
-            for name in all:
-                if name in self.obj.__dict__:
-                    val = self.obj.__dict__[name]
-                elif name in self._var_annotations:
-                    val = empty
-                else:
-                    # this may be an unimported submodule, try importing.
-                    # (https://docs.python.org/3/tutorial/modules.html#importing-from-a-package)
-                    try:
-                        val = extract.load_module(f"{self.modulename}.{name}")
-                    except RuntimeError as e:
-                        warnings.warn(
-                            f"Found {name!r} in {self.modulename}.__all__, but it does not resolve: {e}"
-                        )
-                        val = empty
-                members[name] = val
-
-        else:
-            # Starting with Python 3.10, __annotations__ is created on demand,
-            # so we make a copy here as obj.__dict__ is changed while we iterate over it.
-            # Additionally, accessing self._documented_members may lead to the execution of TYPE_CHECKING blocks,
-            # which may also modify obj.__dict__. (https://github.com/mitmproxy/pdoc/issues/351)
-            for name, obj in list(self.obj.__dict__.items()):
-                # We already exclude everything here that is imported, only a TypeVar,
-                # or a variable without annotation and docstring.
-                # If one needs to document one of these things, __all__ is the correct way.
-                obj_module = inspect.getmodule(obj)
-                declared_in_this_module = self.obj.__name__ == safe_getattr(
-                    obj_module, "__name__", None
-                )
-                include_in_docs = name in self._documented_members or (
-                        declared_in_this_module and not isinstance(obj, TypeVar)
-                )
-                if include_in_docs:
-                    members[name] = obj
-            for name in self._var_docstrings:
-                members.setdefault(name, empty)
-
+        # members = {}
+        #
+        # all = safe_getattr(self.obj, "__all__", False)
+        # if all:
+        #     for name in all:
+        #         if name in self.obj.__dict__:
+        #             val = self.obj.__dict__[name]
+        #         elif name in self._var_annotations:
+        #             val = empty
+        #         else:
+        #             # this may be an unimported submodule, try importing.
+        #             # (https://docs.python.org/3/tutorial/modules.html#importing-from-a-package)
+        #             try:
+        #                 val = extract.load_module(f"{self.modulename}.{name}")
+        #             except RuntimeError as e:
+        #                 warnings.warn(
+        #                     f"Found {name!r} in {self.modulename}.__all__, but it does not resolve: {e}"
+        #                 )
+        #                 val = empty
+        #         members[name] = val
+        #
+        # else:
+        #     # Starting with Python 3.10, __annotations__ is created on demand,
+        #     # so we make a copy here as obj.__dict__ is changed while we iterate over it.
+        #     # Additionally, accessing self._documented_members may lead to the execution of TYPE_CHECKING blocks,
+        #     # which may also modify obj.__dict__. (https://github.com/mitmproxy/pdoc/issues/351)
+        #     for name, obj in list(self.obj.__dict__.items()):
+        #         # We already exclude everything here that is imported, only a TypeVar,
+        #         # or a variable without annotation and docstring.
+        #         # If one needs to document one of these things, __all__ is the correct way.
+        #         obj_module = inspect.getmodule(obj)
+        #         declared_in_this_module = self.obj.__name__ == safe_getattr(
+        #             obj_module, "__name__", None
+        #         )
+        #         include_in_docs = name in self._documented_members or (
+        #                 declared_in_this_module and not isinstance(obj, TypeVar)
+        #         )
+        #         if include_in_docs:
+        #             members[name] = obj
+        #     for name in self._var_docstrings:
+        #         members.setdefault(name, empty)
+        #
             members, notfound = doc_ast.sort_by_source(self.obj, {}, members)
-            members.update(notfound)
-
-        return members
+        #     members.update(notfound)
+        #
+        # return members
 
     @cached_property
     def variables(self) -> list[Variable]:

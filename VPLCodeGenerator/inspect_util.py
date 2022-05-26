@@ -83,3 +83,14 @@ def get_allattr(obj: ModuleType) -> Any:
             return __all__
         else:
             raise ValueError(__all__)
+
+
+def is_package(obj: Any) -> bool:
+    """
+          `True` if the module is a package, `False` otherwise.
+
+          Packages are a special kind of module that may have subdir.
+          Typically, this means that this file is in a directory named like the
+          module with the name `__init__.py`.
+          """
+    return safe_getattr(obj, "__path__", None) is not None
