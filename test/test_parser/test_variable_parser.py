@@ -76,3 +76,8 @@ class TestVariableParser:
         assert self.variable_parser.docstring_in_ns(self.top_level_ns) == self.expected_at_top_level
         assert self.variable_parser.docstring_in_ns(self.ns_classA) == self.expected_in_classA
         assert self.variable_parser.docstring_in_ns(self.ns_classC) == self.expected_in_classC
+
+    def test_variable_parser_not_equal(self):
+        assert not self.variable_parser == 'str'
+        assert not self.variable_parser == VariableParser('code', self.encoding)
+        assert not self.variable_parser == VariableParser(self.source, 'ASCII')
