@@ -1,6 +1,6 @@
 from inspect import getsource
 from typing import Dict
-from VPLCodeGenerator.parser.source_code_parser import VariableParser
+from VPLCodeGenerator.parser import VariableParser
 from test_data import module_example
 
 
