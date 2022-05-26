@@ -26,6 +26,15 @@ class VariableParser:
         """
         self._parsed = False
 
+    def __eq__(self, other):
+        if type(self) == type(other):
+            return self.code == other.code and self.encoding == other.encoding
+        else:
+            return False
+
+    def __hash__(self):
+        return hash((self.code, self.encoding))
+
     def parse(self) -> None:
         """parer the source code and store the variable docstring(comments),
            annotations in class attributes
