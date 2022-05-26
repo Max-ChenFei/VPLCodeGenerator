@@ -5,7 +5,8 @@ from sphinx.pycode.parser import Parser
 
 class VariableParser:
     """The parser picks up variable docstring(comment) and annotations in current module or class,
-    not including the inherited variables.
+    not including the inherited variables. The `inspect.get_annotations` is not used because the variables
+    in `__init__`` can not be collected.
     """
 
     def __init__(self, code: str, encoding: str = 'utf-8') -> None:
