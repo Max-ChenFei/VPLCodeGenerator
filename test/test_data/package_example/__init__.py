@@ -1,4 +1,4 @@
-from .submodules.submodule_a import SubmoduleA
+from .subdir.submodule_a import SubmoduleA
 from .subpackage import SubmoduleC
 from .submodule_b import SubmoduleB
 
