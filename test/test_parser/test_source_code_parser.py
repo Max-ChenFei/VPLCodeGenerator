@@ -1,5 +1,6 @@
 import pytest
 from inspect import getsource
+from importlib import import_module
 from test_data import package_example
 from VPLCodeGenerator.parser import obj_type, VariableParser, SourceCodeParser, SourceCodeModuleParser
 
@@ -46,3 +47,66 @@ class TestSourceCodeParser:
         mocker.patch.object(self.parser, 'var_docstring', var_docstr)
         mocker.patch.object(self.parser, 'var_annotations', var_annots)
         assert self.parser.vars_sets == var_docstr.keys() | var_annots.keys()
+
+
+class TestSourceCodeModuleParser(TestSourceCodeParser):
+    def setup_method(self):
+        self.parser = SourceCodeModuleParser(self.obj, self.encoding)
+
+    def test_var_docstring(self):
+        expected: dict[str, str] = VariableParser(self.code, self.encoding).docstring_in_ns(self.parser.namespace)
+        if expected is None or expected == {}:
+            raise Exception('No var docstring found, please use other test data')
+        assert self.parser.var_docstring == expected
+
+    def test_var_annotations(self):
+        expected: dict[str, str] = VariableParser(self.code, self.encoding).annotations_in_ns(self.parser.namespace)
+        if expected is None or expected == {}:
+            raise Exception('No var annotations found, please use other test data')
+        assert self.parser.var_annotations == expected
+
+    def test_member_objects(self):
+        assert True
+
+    def test_submodules_when_have_all_attr(self):
+        expected_modules = [package_example.submodule_b]
+        for actual, expected in zip(self.parser.submodules, expected_modules):
+            assert actual == expected
+
+    def test_submodules_when_no_all_attr(self):
+        all_attr = self.obj.__all__
+        del self.obj.__all__
+        parser = SourceCodeModuleParser(self.obj, self.encoding)
+        expected_modules = [package_example.submodule_b, package_example.subpackage]
+        for actual, expected in zip(parser.submodules, expected_modules):
+            assert actual == expected
+        self.obj.__all__ = all_attr
+
+    def test_submodules_return_empty(self):
+        self.parser = SourceCodeModuleParser(self.obj.submodule_a, self.encoding)
+        assert self.parser.submodules == []
+
+    def test_member_objects_when_have_all_attr(self):
+        attrs = self.obj.__dict__
+        import numpy
+        expected = [attrs['submodule_a'], attrs['submodule_b'], attrs['ClassA'], attrs['SubmoduleC'],
+                    numpy, attrs['module_level_function'], attrs['var1'], attrs['instance_of_a']]
+        for n, v, actual in zip(self.obj.__all__, expected, self.parser.member_objects.items()):
+            assert actual[0] == n
+            assert actual[1] == v
+
+    def test_member_objects_when_no_all_attr(self):
+        all_attr = self.obj.__all__
+        del self.obj.__all__
+        parser = SourceCodeModuleParser(self.obj, self.encoding)
+        attrs = self.obj.__dict__
+        expected_members = {'module_level_function': attrs['submodule_a'], 'ClassA': attrs['ClassA'],
+                            'instance_of_a': attrs['instance_of_a'], 'var1': attrs['var1'],
+                            'var3': attrs['var3'], 'var4': attrs['var4'], 'var5': attrs['var5'],
+                            'ClassB': attrs['ClassB'], 'instance_of_b': attrs['instance_of_b'],
+                            'test_data.package_example.submodule_b': import_module('test_data.package_example.submodule_b'),
+                            'test_data.package_example.subpackage': import_module('test_data.package_example.subpackage')}
+        for actual, expected in zip(parser.member_objects, expected_members):
+            assert actual == expected
+
+        self.obj.__all__ = all_attr
