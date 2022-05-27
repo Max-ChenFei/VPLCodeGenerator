@@ -1,14 +1,16 @@
-from .subdir.submodule_a import SubmoduleA
-from .subpackage import SubmoduleC
-from .submodule_b import SubmoduleB
+import os
+from .subdir import submodule_a
+from . import submodule_b, subpackage
+from .subpackage import *  # import SubmoduleC
 
-__all__ = ['SubmoduleA', 'name', 'SubmoduleC', 'SubmoduleB', 'name', 'ClassA',
-           'module_level_function', 'var1', 'var2', 'var3', 'instance_of_a']
+# `numpy` represents the module that not imported
+__all__ = ['submodule_a', 'submodule_b', 'ClassA', 'SubmoduleC',
+            'numpy', 'module_level_function', 'var1', 'instance_of_a']
 
 name = 'This is a package'
 
 
-def module_level_function(arg1, arg2='default', *args, **kwargs):
+def module_level_function(arg1, arg2='default', *args, **kwargs) -> float:
     """function docstring"""
     v = arg1 * 2
     return v
@@ -49,7 +51,7 @@ class ClassA(object):
 instance_of_a: ClassA = ClassA('sample_instance')
 
 var1: float = 3.1415925  #: doc comment after assignment
-var2: str = 'str'  # no docstring, no doc comment
+var2: str  # this is a comment. This will only be accessed via var_annotations, not via __dict__ and var_docstring
 var3: int = 3
 """variable docstring"""
 var4: list = ['a', 'b', 'c']
