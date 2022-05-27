@@ -1,7 +1,7 @@
 import pytest
 from inspect import getsource
 from test_data import package_example
-from VPLCodeGenerator.parser import obj_type, VariableParser, SourceCodeParser
+from VPLCodeGenerator.parser import obj_type, VariableParser, SourceCodeParser, SourceCodeModuleParser
 
 
 def test_obj_type():
@@ -35,3 +35,14 @@ class TestSourceCodeParser:
         assert self.parser.code == self.code
         assert self.parser.namespace == ''
         assert self.parser._variable_parser == VariableParser(self.code, self.encoding)
+
+    def test_return_empty_list_when_not_package(self):
+        self.parser = SourceCodeParser(self.obj.ClassA, self.encoding)
+        assert self.parser.submodules == []
+
+    def test_vars_sets(self, mocker):
+        var_docstr = {'var1': 'doc1', 'var2': 'doc1'}
+        var_annots = {'var1': 'doc1', 'var3': 'doc1'}
+        mocker.patch.object(self.parser, 'var_docstring', var_docstr)
+        mocker.patch.object(self.parser, 'var_annotations', var_annots)
+        assert self.parser.vars_sets == var_docstr.keys() | var_annots.keys()
