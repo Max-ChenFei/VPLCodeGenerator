@@ -50,7 +50,7 @@ class SourceCodeParser:
         """A mapping from member variable names to their type annotations."""
 
     @cached_property
-    def _vars_sets(self) -> set[str]:
+    def vars_sets(self) -> set[str]:
         return self.var_docstring.keys() | self.var_annotations.keys()
 
     @cached_property
