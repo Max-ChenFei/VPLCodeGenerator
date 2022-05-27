@@ -9,6 +9,7 @@ sphinx = "*"
 numpy = "*"
 pdoc = "*"
 coverage = "*"
+pytest-mock = "*"
 
 [dev-packages]
 
