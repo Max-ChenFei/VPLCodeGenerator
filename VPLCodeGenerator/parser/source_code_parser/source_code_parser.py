@@ -1,3 +1,4 @@
+import enum
 import pkgutil
 import warnings
 import traceback
@@ -6,7 +7,7 @@ from types import ModuleType
 from typing import Any, TypeVar, Callable
 from importlib import import_module
 from functools import cached_property
-from inspect import getsource, getmodule, ismodule, isclass
+from inspect import getsource, getmodule, ismodule, isclass, isabstract
 from VPLCodeGenerator.inspect_util import is_package, safe_getattr, empty, NonUserDefinedCallables
 from .variable_parser import VariableParser
 
@@ -173,3 +174,110 @@ class SourceCodeModuleParser(SourceCodeParser):
                 continue
             submodules.append(module)
         return submodules
+
+
+class SourceCodeClassParser(SourceCodeParser):
+    def __init__(self, obj: Any, encoding: str = 'utf-8') -> None:
+        super(SourceCodeClassParser, self).__init__(obj, encoding)
+        self.namespace = self.obj.__name__
+        self._var_annotations: dict[str, str] = {}
+        self._var_docstring: dict[str, str] = {}
+        self._all_var_docstring_annotations()
+
+    def _all_var_docstring_annotations(self):
+        """
+        Get docstring and annotations of all variables including inherited ones.
+        The variables inherited from base class and declared in __init__ can not be accessed via `class.__dict__`, so
+        we parse the source code again.
+        """
+        # variable in current object
+        self._variable_parser.parse()
+        self._var_docstring = self._variable_parser.docstring_in_ns(self.namespace)
+        self._var_annotations = self._variable_parser.annotations_in_ns(self.namespace)
+        # variable inherited from base class
+        for cls in self.obj.__mro__[1:]:  # remove the current class
+            if cls == object:
+                continue
+            p = SourceCodeClassParser(cls)
+            for name, docstr in p.var_docstring.items():
+                self._var_docstring.setdefault(name, docstr)
+            for name, annot in p._var_annotations.items():
+                self._var_annotations.setdefault(name, annot)
+
+    @cached_property
+    def var_docstring(self) -> dict[str, str]:
+        """A mapping from member variable names to their docstrings including inherited variables."""
+        return self._var_docstring
+
+    @cached_property
+    def var_annotations(self) -> dict[str, str]:
+        """A mapping from member variable names to their type annotations including inherited variables.
+         `__annotations__` from Python 3.10 does not inlcude inherited variables and ones in the `__init__`"""
+        return self._var_annotations
+
+    @cached_property
+    @abstractmethod
+    def member_objects(self) -> dict[str, Any]:
+        """
+        A mapping from member names to their Python objects.
+        The member name is either function, attributes (declared outside the __init__)
+        References
+        -------
+        https://github.com/mitmproxy/pdoc/blob/2fa71764eb175aa7b079db0c408e53f9c71fd7f3/pdoc/doc.py#L636-L687
+        """
+        members: dict[str, Any] = {}
+        for cls in self.obj.__mro__:
+            if cls == object:
+                continue
+            for name, obj in cls.__dict__.items():
+                members.setdefault(name, obj)
+        # use value from the current class not its base class
+        for attr in ['__init__', '__doc__', '__annotations__', '__dict__']:
+            members[attr] = getattr(self.obj, attr)
+        # include variables declared in __init__ and only with annotations without assigment (not in __dict__)
+        for name in self.vars_sets:
+            try:
+                v = self.obj[name]
+            except:
+                v = empty
+            members.setdefault(name, v)
+
+        init_has_no_doc = members.get("__init__", object.__init__).__doc__ in (
+            None,
+            object.__init__.__doc__,
+        )
+        if init_has_no_doc:
+            if isabstract(self.obj):
+                # Special case: We don't want to show constructors for abstract base classes unless
+                # they have a custom docstring.
+                del members["__init__"]
+            elif issubclass(self.obj, enum.Enum):
+                # Special case: Do not show a constructor for enums. They are typically not constructed by users.
+                # The alternative would be showing __new__, as __call__ is too verbose.
+                del members["__init__"]
+            elif issubclass(self.obj, dict):
+                # Special case: Do not show a constructor for dict subclasses.
+                del members["__init__"]
+            else:
+                # Check if there's a helpful Metaclass.__call__ or Class.__new__. This dance is very similar to
+                # https://github.com/python/cpython/blob/9feae41c4f04ca27fd2c865807a5caeb50bf4fc4/Lib/inspect.py#L2359-L2376
+                call = safe_getattr(type(self.obj), "__call__", None)
+                custom_call_with_custom_docstring = (
+                        call is not None
+                        and not isinstance(call, NonUserDefinedCallables)
+                        and call.__doc__ not in (None, object.__call__.__doc__)
+                )
+                if custom_call_with_custom_docstring:
+                    members["__init__"] = call
+                else:
+                    # Does our class define a custom __new__ method?
+                    new = safe_getattr(self.obj, "__new__", None)
+                    custom_new_with_custom_docstring = (
+                            new is not None
+                            and not isinstance(new, NonUserDefinedCallables)
+                            and new.__doc__ not in (None, object.__new__.__doc__)
+                    )
+                    if custom_new_with_custom_docstring:
+                        members["__init__"] = new
+
+        return members

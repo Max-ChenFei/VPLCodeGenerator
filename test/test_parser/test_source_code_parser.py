@@ -2,7 +2,9 @@ import pytest
 from inspect import getsource
 from importlib import import_module
 from test_data import package_example
-from VPLCodeGenerator.parser import obj_type, VariableParser, SourceCodeParser, SourceCodeModuleParser
+from VPLCodeGenerator.parser import (obj_type, VariableParser, SourceCodeParser,
+                                     SourceCodeModuleParser, SourceCodeClassParser)
+from VPLCodeGenerator.inspect_util import empty
 
 
 def test_obj_type():
@@ -103,3 +105,47 @@ class TestSourceCodeModuleParser(TestSourceCodeParser):
             assert actual == expected
 
         self.obj.__all__ = all_attr
+
+
+class TestSourceCodeClassParser:
+    encoding = 'utf-8'
+    obj = package_example.ClassB
+    code = getsource(obj)
+
+    def setup_method(self):
+        self.parser = SourceCodeClassParser(self.obj, self.encoding)
+
+    def test_attribute_assignment_in_init(self):
+        assert self.parser.obj == self.obj
+        assert self.parser.type == obj_type(self.obj)
+        assert self.parser.code == self.code
+        assert self.parser.namespace == self.obj.__name__
+
+    def test_var_docstring(self):
+        obj = package_example.ClassA
+        p = VariableParser(getsource(obj), self.encoding)
+        expected: dict[str, str] = p.docstring_in_ns(obj.__name__)
+        if expected is None or expected == {}:
+            raise Exception('No var docstring found, please use other test data')
+        assert self.parser.var_docstring == expected
+
+    def test_var_annotations(self):
+        obj = package_example.ClassA
+        p = VariableParser(getsource(obj), self.encoding)
+        expected: dict[str, str] = p.annotations_in_ns(obj.__name__)
+        if expected is None or expected == {}:
+            raise Exception('No var annotations found, please use other test data')
+        assert self.parser.var_annotations == expected
+
+    def test_member_objects(self):
+        actual = self.parser.member_objects
+        expected = {'__init__': package_example.ClassA.__init__, '__module__': self.obj.__module__,
+                    '__doc__': self.obj.__doc__, '__annotations__': self.obj.__annotations__,
+                    '__dict__': self.obj.__dict__, '__weakref__': self.obj.__weakref__,
+                    'init_attr7': self.obj.init_attr7, 'get_attr6': self.obj.get_attr6,
+                    'update_attr3': self.obj.update_attr3, 'ClassC': self.obj.ClassC,
+                    'attr0': empty, 'attr1': 'attr1_v', 'attr2': empty, 'attr3': empty,
+                    'attr4': empty, 'attr5': empty
+                    }
+        assert actual.keys() == expected.keys()
+        assert actual == expected
