@@ -7,8 +7,7 @@ from typing import Any, TypeVar, Callable
 from importlib import import_module
 from functools import cached_property
 from inspect import getsource, getmodule, ismodule, isclass
-from pdoc.doc_types import empty
-from VPLCodeGenerator.inspect_util import is_package, safe_getattr
+from VPLCodeGenerator.inspect_util import is_package, safe_getattr, empty, NonUserDefinedCallables
 from .variable_parser import VariableParser
 
 

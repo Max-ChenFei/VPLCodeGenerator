@@ -3,6 +3,25 @@ from types import ModuleType
 import inspect
 import warnings
 
+empty = inspect.Signature.empty  # type: ignore
+
+# adapted from
+# pdoc.types.py
+# https://github.com/python/cpython/blob/9feae41c4f04ca27fd2c865807a5caeb50bf4fc4/Lib/inspect.py#L1740-L1747
+# ✂ start ✂
+BuiltinFunctionType = type(len)
+_WrapperDescriptor = type(type.__call__)
+_MethodWrapper = type(all.__call__)  # type: ignore
+_ClassMethodWrapper = type(int.__dict__["from_bytes"])
+
+NonUserDefinedCallables = (
+    _WrapperDescriptor,
+    _MethodWrapper,
+    _ClassMethodWrapper,
+    BuiltinFunctionType,
+)
+# ✂ end ✂
+
 
 def safe_getattr(obj: Any, attr_name: str, default=None) -> Any:
     """
