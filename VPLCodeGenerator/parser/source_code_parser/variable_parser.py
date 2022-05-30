@@ -1,5 +1,4 @@
 from typing import Dict, Tuple
-from functools import cache
 from sphinx.pycode.parser import Parser
 
 
@@ -54,7 +53,6 @@ class VariableParser:
                 out[name] = value
         return out
 
-    @cache
     def annotations_in_ns(self, ns: str = '') -> Dict[str, str]:
         """
         Return the variable names and their annotations in the namespace
@@ -71,7 +69,6 @@ class VariableParser:
         self.parse()
         return self._value_in_ns(self.annotations, ns)
 
-    @cache
     def docstring_in_ns(self, ns: str = '') -> Dict[str, str]:
         """
         Return the variable names and their docstring in the namespace
