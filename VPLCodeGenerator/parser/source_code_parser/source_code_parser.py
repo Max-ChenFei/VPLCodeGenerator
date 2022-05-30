@@ -63,11 +63,6 @@ class SourceCodeParser:
     def member_objects(self) -> dict[str, Any]:
         """A mapping from member names to their Python objects."""
 
-    @cached_property
-    def submodules(self):
-        if not is_package(self.obj):
-            return []
-
 
 class SourceCodeModuleParser(SourceCodeParser):
     def __init__(self, obj: ModuleType, encoding: str = 'utf-8') -> None:
