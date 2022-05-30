@@ -37,10 +37,6 @@ class TestSourceCodeParser:
         assert self.parser.namespace == ''
         assert self.parser._variable_parser == VariableParser(self.code, self.encoding)
 
-    def test_return_empty_list_when_not_package(self):
-        self.parser = SourceCodeParser(self.obj.ClassA, self.encoding)
-        assert self.parser.submodules == []
-
     def test_vars_sets(self, mocker):
         var_docstr = {'var1': 'doc1', 'var2': 'doc1'}
         var_annots = {'var1': 'doc1', 'var3': 'doc1'}
@@ -64,9 +60,6 @@ class TestSourceCodeModuleParser(TestSourceCodeParser):
         if expected is None or expected == {}:
             raise Exception('No var annotations found, please use other test data')
         assert self.parser.var_annotations == expected
-
-    def test_member_objects(self):
-        assert True
 
     def test_submodules_when_have_all_attr(self):
         expected_modules = [package_example.submodule_b]
