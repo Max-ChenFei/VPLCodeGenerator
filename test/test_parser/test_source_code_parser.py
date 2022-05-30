@@ -90,7 +90,7 @@ class TestSourceCodeModuleParser(TestSourceCodeParser):
         attrs = self.obj.__dict__
         import numpy
         expected = [attrs['submodule_a'], attrs['submodule_b'], attrs['ClassA'], attrs['SubmoduleC'],
-                    numpy, attrs['module_level_function'], attrs['var1'], attrs['instance_of_a']]
+                    numpy, attrs['module_level_function'], attrs['var1'], empty, attrs['instance_of_a']]
         for n, v, actual in zip(self.obj.__all__, expected, self.parser.member_objects.items()):
             assert actual[0] == n
             assert actual[1] == v

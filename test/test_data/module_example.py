@@ -3,7 +3,7 @@
 
 import numpy  # import example
 
-__all__ = ['ClassA', 'ClassB', 'var1', 'var3']
+__all__ = ['ClassA', 'ClassB', 'var1', 'var2', 'var3']
 
 
 def module_level_function(arg1, arg2='default', *args, **kwargs):
@@ -14,6 +14,7 @@ def module_level_function(arg1, arg2='default', *args, **kwargs):
 
 class ClassA(object):
     """A class docstring"""
+    attr0: str  # only type annotations
     attr1 = 'attr1_v'  #: doc comment after assignment
 
     def __init__(self, attr):
@@ -47,8 +48,7 @@ class ClassA(object):
 instance_of_a: ClassA = ClassA('sample_instance')
 
 var1: float = 3.1415925  #: doc comment after assignment
-var2: str = 'str'  # no docstring, no doc comment
-
+var2: str  # only type annotations, no docstring, no doc comment
 var3: int = 3
 """variable docstring"""
 var4: list = ['a', 'b', 'c']

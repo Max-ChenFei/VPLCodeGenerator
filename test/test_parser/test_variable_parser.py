@@ -7,7 +7,8 @@ from test_data import module_example
 class TestVariableParser:
     source = getsource(module_example)
     encoding = 'utf-8'
-    annotations_expected = {('ClassA', 'attr3'): 'float',
+    annotations_expected = {('ClassA', 'attr0'): 'str',
+                            ('ClassA', 'attr3'): 'float',
                             ('ClassA', 'attr4'): 'str',
                             ('ClassA', 'attr5'): 'str',
                             ('ClassA.ClassC', 'attr1'): 'None',

@@ -5,7 +5,7 @@ from .subpackage import *  # import SubmoduleC
 
 # `numpy` represents the module that not imported
 __all__ = ['submodule_a', 'submodule_b', 'ClassA', 'SubmoduleC',
-            'numpy', 'module_level_function', 'var1', 'instance_of_a']
+            'numpy', 'module_level_function', 'var1', 'var2', 'instance_of_a']
 
 name = 'This is a package'
 
@@ -18,6 +18,7 @@ def module_level_function(arg1, arg2='default', *args, **kwargs) -> float:
 
 class ClassA(object):
     """A class docstring"""
+    attr0: str  # only type annotations
     attr1 = 'attr1_v'  #: doc comment after assignment
 
     def __init__(self, attr):
