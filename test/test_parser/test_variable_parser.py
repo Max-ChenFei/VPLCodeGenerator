@@ -82,3 +82,6 @@ class TestVariableParser:
         assert not self.variable_parser == 'str'
         assert not self.variable_parser == VariableParser('code', self.encoding)
         assert not self.variable_parser == VariableParser(self.source, 'ASCII')
+
+    def test_hash(self):
+        self.variable_parser.__hash__() == hash((self.variable_parser.code, self.variable_parser.encoding))
