@@ -35,6 +35,7 @@ from pdoc.doc_types import (
     GenericAlias,
     empty,
     safe_eval_type,
+    resolve_annotations as pdoc_resolve_annotations
 )
 
 from pdoc._compat import cache, cached_property, formatannotation, get_origin
@@ -55,6 +56,20 @@ def _include_fullname_in_traceback(f):
             raise RuntimeError(f"Error in {self.fullname}'s repr!") from e
 
     return wrapper
+
+
+def resolve_annotations(obj: Any, annotations: dict[str, Any], fullname: str, ) -> dict[str, Any]:
+    # try to resolve builtin types
+    for k, v in annotations.items():
+        try:
+            annotations[k] = __builtins__[v]
+        except:
+            continue
+    # some are in __annotations__
+    for k, v in safe_getattr(obj, "__annotations__", {}).items():
+        annotations[k] = v
+    # other types
+    return pdoc_resolve_annotations(annotations, obj, fullname)
 
 
 T = TypeVar("T")
@@ -209,9 +224,10 @@ class Namespace(Doc[T], metaclass=ABCMeta):
         """A mapping from some member variable names to their docstrings."""
 
     @cached_property
-    @abstractmethod
     def _var_annotations(self) -> dict[str, Any]:
         """A mapping from some member variable names to their type annotations."""
+        annots = self.parser.var_annotations
+        return resolve_annotations(self.obj, annots, self.fullname)
 
     @abstractmethod
     def _taken_from(self, member_name: str, obj: Any) -> tuple[str, str]:
@@ -385,10 +401,6 @@ class Module(Namespace[types.ModuleType]):
     def _var_docstrings(self) -> dict[str, str]:
         return self.parser.var_docstring
 
-    @cached_property
-    def _var_annotations(self) -> dict[str, Any]:
-        return self.parser.var_annotations
-
     def _taken_from(self, member_name: str, obj: Any) -> tuple[str, str]:
         if obj is empty:
             return self.modulename, f"{self.qualname}.{member_name}".lstrip(".")
@@ -472,10 +484,6 @@ class Class(Namespace[type]):
     @cached_property
     def _var_docstrings(self) -> dict[str, str]:
         return self.parser.var_docstring
-
-    @cached_property
-    def _var_annotations(self) -> dict[str, type]:
-        self.parser.var_annotations
 
     @cached_property
     def _declarations(self) -> dict[str, tuple[str, str]]:
