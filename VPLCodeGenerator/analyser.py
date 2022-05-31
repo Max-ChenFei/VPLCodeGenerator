@@ -219,9 +219,9 @@ class Namespace(Doc[T], metaclass=ABCMeta):
         """
 
     @cached_property
-    @abstractmethod
     def _var_docstrings(self) -> dict[str, str]:
         """A mapping from some member variable names to their docstrings."""
+        return self.parser.var_docstring
 
     @cached_property
     def _var_annotations(self) -> dict[str, Any]:
@@ -397,10 +397,6 @@ class Module(Namespace[types.ModuleType]):
     def is_package(self) -> bool:
         return is_package(self.obj)
 
-    @cached_property
-    def _var_docstrings(self) -> dict[str, str]:
-        return self.parser.var_docstring
-
     def _taken_from(self, member_name: str, obj: Any) -> tuple[str, str]:
         if obj is empty:
             return self.modulename, f"{self.qualname}.{member_name}".lstrip(".")
@@ -480,10 +476,6 @@ class Class(Namespace[type]):
             return ""
         else:
             return doc
-
-    @cached_property
-    def _var_docstrings(self) -> dict[str, str]:
-        return self.parser.var_docstring
 
     @cached_property
     def _declarations(self) -> dict[str, tuple[str, str]]:
