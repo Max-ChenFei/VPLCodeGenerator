@@ -1,4 +1,5 @@
 import os
+from typing import ClassVar
 from .subdir import submodule_a
 from . import submodule_b, subpackage
 from .subpackage import *  # import SubmoduleC
@@ -71,6 +72,7 @@ class ClassB(ClassA):
     """This is the B class docstring.
        It is derived from A.
     """
+    attr8: ClassVar[str] = 'class attr 8'  #: This is class attr
 
     def init_attr7(self):
         self.attr7: float = 5  #: attr7 not in __init__ function

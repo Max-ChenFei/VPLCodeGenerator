@@ -125,6 +125,7 @@ class TestSourceCodeClassParser:
         obj = package_example.ClassA
         p = VariableParser(getsource(obj), self.encoding)
         expected: dict[str, str] = p.docstring_in_ns(obj.__name__)
+        expected['attr8'] = 'This is class attr'
         if expected is None or expected == {}:
             raise Exception('No var docstring found, please use other test data')
         assert self.parser.var_docstring == expected
@@ -133,6 +134,7 @@ class TestSourceCodeClassParser:
         obj = package_example.ClassA
         p = VariableParser(getsource(obj), self.encoding)
         expected: dict[str, str] = p.annotations_in_ns(obj.__name__)
+        expected['attr8'] = 'ClassVar[str]'
         if expected is None or expected == {}:
             raise Exception('No var annotations found, please use other test data')
         assert self.parser.var_annotations == expected
@@ -145,7 +147,7 @@ class TestSourceCodeClassParser:
                     'init_attr7': self.obj.init_attr7, 'get_attr6': self.obj.get_attr6,
                     'update_attr3': self.obj.update_attr3, 'ClassC': self.obj.ClassC,
                     'attr0': empty, 'attr1': 'attr1_v', 'attr2': empty, 'attr3': empty,
-                    'attr4': empty, 'attr5': empty
+                    'attr4': empty, 'attr5': empty, 'attr8': self.obj.attr8
                     }
         assert actual.keys() == expected.keys()
         assert actual == expected
