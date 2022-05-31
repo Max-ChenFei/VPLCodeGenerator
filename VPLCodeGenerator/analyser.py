@@ -19,28 +19,21 @@ This module is highly inspired by pdoc.doc.
 """
 from __future__ import annotations
 
-import enum
 import inspect
-import os
-import pkgutil
 import re
 import sys
 import textwrap
-import traceback
 import types
 import warnings
 from abc import ABCMeta, abstractmethod
-from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
 from typing import Any, ClassVar, Generic, TypeVar, Union
-from inspect_util import safe_getattr, safe_getdoc, is_package
+from VPLCodeGenerator.inspect_util import safe_getattr, safe_getdoc, is_package
 from pdoc import doc_ast, doc_pyi, extract
 from pdoc.doc_types import (
     GenericAlias,
-    NonUserDefinedCallables,
     empty,
-    resolve_annotations,
     safe_eval_type,
 )
 
@@ -105,7 +98,7 @@ class Doc(Generic[T]):
     """
 
     def __init__(
-            self, modulename: str, qualname: str, obj: T, taken_from: tuple[str, str]
+            self, modulename: str, qualname: str, obj: T, taken_from: tuple[str, str], parser_config: dict[str, object]
     ):
         """
         Initializes a documentation object, where
@@ -117,6 +110,7 @@ class Doc(Generic[T]):
         self.qualname = qualname
         self.obj = obj
         self.taken_from = taken_from
+        self.parser_config = parser_config
 
     @cached_property
     def fullname(self) -> str:
@@ -142,11 +136,8 @@ class Doc(Generic[T]):
     def source(self) -> str:
         """
         The source code of the Python object as a `str`.
-
-        If the source cannot be obtained (for example, because we are dealing with a native C object),
-        an empty string is returned.
         """
-        return doc_ast.get_source(self.obj)
+        return inspect.getsource(self.obj)
 
     @cached_property
     def source_file(self) -> Path | None:
@@ -279,12 +270,9 @@ class Namespace(Doc[T], metaclass=ABCMeta):
                     and not isinstance(obj, GenericAlias)
             ):
                 # `dict[str,str]` is a GenericAlias instance. We want to render type aliases as variables though.
-                doc = Class(self.modulename, qualname, obj, taken_from)
+                doc = Class(self.modulename, qualname, obj, taken_from, self.parser_config)
             elif inspect.ismodule(obj):
-                if os.environ.get("PDOC_SUBMODULES"):  # pragma: no cover
-                    doc = Module.from_name(obj.__name__)
-                else:
-                    continue
+                doc = Module(obj, self.parser_config)
             elif inspect.isdatadescriptor(obj):
                 doc = Variable(
                     self.modulename,
@@ -369,18 +357,20 @@ class Module(Namespace[types.ModuleType]):
     def __init__(
             self,
             module: types.ModuleType,
+            parser_config: dict[str, Any]
     ):
         """
         Creates a documentation object given the actual
         Python module object.
         """
-        super().__init__(module.__name__, "", module, (module.__name__, ""))
+        super().__init__(module.__name__, "", module, (module.__name__, ""), parser_config)
+        self.parser = self.parser_config['module'](self.obj)
 
     @classmethod
     @cache
-    def from_name(cls, name: str) -> Module:
+    def from_name(cls, name: str, parser_config: dict[str, object]) -> Module:
         """Create a `Module` object by supplying the module's (full) name."""
-        return cls(extract.load_module(name))
+        return cls(extract.load_module(name), parser_config)
 
     @cache
     @_include_fullname_in_traceback
@@ -393,15 +383,11 @@ class Module(Namespace[types.ModuleType]):
 
     @cached_property
     def _var_docstrings(self) -> dict[str, str]:
-        return doc_ast.walk_tree(self.obj).docstrings
+        return self.parser.var_docstring
 
     @cached_property
     def _var_annotations(self) -> dict[str, Any]:
-        annotations = doc_ast.walk_tree(self.obj).annotations.copy()
-        for k, v in safe_getattr(self.obj, "__annotations__", {}).items():
-            annotations[k] = v
-
-        return resolve_annotations(annotations, self.obj, self.fullname)
+        return self.parser.var_annotations
 
     def _taken_from(self, member_name: str, obj: Any) -> tuple[str, str]:
         if obj is empty:
@@ -420,98 +406,16 @@ class Module(Namespace[types.ModuleType]):
             )
 
     @cached_property
-    def own_members(self) -> list[Doc]:
-        return list(self.members.values())
-
-    @cached_property
-    def submodules(self) -> list[Module]:
-        """A list of all (direct) subdir."""
-        if not self.is_package:
-            return []
-
-        include: Callable[[str], bool]
-        mod_all = safe_getattr(self.obj, "__all__", False)
-        if mod_all is not False:
-            mod_all_pos = {name: i for i, name in enumerate(mod_all)}
-            include = mod_all_pos.__contains__
-        else:
-
-            def include(name: str) -> bool:
-                # optimization: we don't even try to load modules starting with an underscore as they would not be
-                # visible by default. The downside of this is that someone who overrides `is_public` will miss those
-                # entries, the upsides are 1) better performance and 2) less warnings because of import failures
-                # (think of OS-specific modules, e.g. _linux.py failing to import on Windows).
-                return not name.startswith("_")
-
-        submodules = []
-        for mod in pkgutil.iter_modules(self.obj.__path__, f"{self.fullname}."):
-            _, _, mod_name = mod.name.rpartition(".")
-            if not include(mod_name):
-                continue
-            try:
-                module = Module.from_name(mod.name)
-            except RuntimeError:
-                warnings.warn(f"Couldn't import {mod.name}:\n{traceback.format_exc()}")
-                continue
-            submodules.append(module)
-
-        if mod_all:
-            submodules = sorted(submodules, key=lambda m: mod_all_pos[m.name])
-
-        return submodules
-
-    @cached_property
     def _documented_members(self) -> set[str]:
-        return self._var_docstrings.keys() | self._var_annotations.keys()
+        return self.parser.vars_sets
 
     @cached_property
     def _member_objects(self) -> dict[str, Any]:
-        # members = {}
-        #
-        # all = safe_getattr(self.obj, "__all__", False)
-        # if all:
-        #     for name in all:
-        #         if name in self.obj.__dict__:
-        #             val = self.obj.__dict__[name]
-        #         elif name in self._var_annotations:
-        #             val = empty
-        #         else:
-        #             # this may be an unimported submodule, try importing.
-        #             # (https://docs.python.org/3/tutorial/modules.html#importing-from-a-package)
-        #             try:
-        #                 val = extract.load_module(f"{self.modulename}.{name}")
-        #             except RuntimeError as e:
-        #                 warnings.warn(
-        #                     f"Found {name!r} in {self.modulename}.__all__, but it does not resolve: {e}"
-        #                 )
-        #                 val = empty
-        #         members[name] = val
-        #
-        # else:
-        #     # Starting with Python 3.10, __annotations__ is created on demand,
-        #     # so we make a copy here as obj.__dict__ is changed while we iterate over it.
-        #     # Additionally, accessing self._documented_members may lead to the execution of TYPE_CHECKING blocks,
-        #     # which may also modify obj.__dict__. (https://github.com/mitmproxy/pdoc/issues/351)
-        #     for name, obj in list(self.obj.__dict__.items()):
-        #         # We already exclude everything here that is imported, only a TypeVar,
-        #         # or a variable without annotation and docstring.
-        #         # If one needs to document one of these things, __all__ is the correct way.
-        #         obj_module = inspect.getmodule(obj)
-        #         declared_in_this_module = self.obj.__name__ == safe_getattr(
-        #             obj_module, "__name__", None
-        #         )
-        #         include_in_docs = name in self._documented_members or (
-        #                 declared_in_this_module and not isinstance(obj, TypeVar)
-        #         )
-        #         if include_in_docs:
-        #             members[name] = obj
-        #     for name in self._var_docstrings:
-        #         members.setdefault(name, empty)
-        #
-            members, notfound = doc_ast.sort_by_source(self.obj, {}, members)
-        #     members.update(notfound)
-        #
-        # return members
+        return self.parser.member_objects
+
+    @cached_property
+    def own_members(self) -> list[Doc]:
+        return list(self.members.values())
 
     @cached_property
     def variables(self) -> list[Variable]:
@@ -521,6 +425,13 @@ class Module(Namespace[types.ModuleType]):
         return [x for x in self.members.values() if isinstance(x, Variable)]
 
     @cached_property
+    def functions(self) -> list[Function]:
+        """
+        A list of all documented module level functions.
+        """
+        return [x for x in self.members.values() if isinstance(x, Function)]
+
+    @cached_property
     def classes(self) -> list[Class]:
         """
         A list of all documented module level classes.
@@ -528,17 +439,21 @@ class Module(Namespace[types.ModuleType]):
         return [x for x in self.members.values() if isinstance(x, Class)]
 
     @cached_property
-    def functions(self) -> list[Function]:
-        """
-        A list of all documented module level functions.
-        """
-        return [x for x in self.members.values() if isinstance(x, Function)]
+    def submodules(self) -> list[Module]:
+        """A list of all (direct) subdir."""
+        try:
+            return self.parser.submodules
+        except AttributeError:
+            raise Exception('Please use parser that can get submodules')
 
 
 class Class(Namespace[type]):
     """
     Representation of a class's documentation.
     """
+    def __init__(self, modulename: str, qualname: str, obj: T, taken_from: tuple[str, str], parsers: dict[str, Any]):
+        super(Class, self).__init__(modulename, qualname, obj, taken_from, parsers)
+        self.parser = self.parser_config['class'](self.obj)
 
     @cache
     @_include_fullname_in_traceback
@@ -556,42 +471,11 @@ class Class(Namespace[type]):
 
     @cached_property
     def _var_docstrings(self) -> dict[str, str]:
-        docstrings: dict[str, str] = {}
-        for cls in self.obj.__mro__:
-            for name, docstr in doc_ast.walk_tree(cls).docstrings.items():
-                docstrings.setdefault(name, docstr)
-        return docstrings
+        return self.parser.var_docstring
 
     @cached_property
     def _var_annotations(self) -> dict[str, type]:
-        # this is a bit tricky: __annotations__ also includes annotations from parent classes,
-        # but we need to execute them in the namespace of the parent class.
-        # Our workaround for this is to walk the MRO backwards, and only update/evaluate only if the annotation changes.
-        annotations: dict[
-            str, tuple[Any, type]
-        ] = {}  # attribute -> (annotation_unresolved, annotation_resolved)
-        for cls in reversed(self.obj.__mro__):
-            cls_annotations = doc_ast.walk_tree(cls).annotations.copy()
-            dynamic_annotations = safe_getattr(cls, "__annotations__", None)
-            if isinstance(dynamic_annotations, dict):
-                for attr, unresolved_annotation in dynamic_annotations.items():
-                    cls_annotations[attr] = unresolved_annotation
-            cls_fullname = (
-                    safe_getattr(cls, "__module__", "") + "." + cls.__qualname__
-            ).lstrip(".")
-
-            new_annotations = {
-                attr: unresolved_annotation
-                for attr, unresolved_annotation in cls_annotations.items()
-                if attr not in annotations
-                   or annotations[attr][0] is not unresolved_annotation
-            }
-            for attr, t in resolve_annotations(
-                    new_annotations, inspect.getmodule(cls), cls_fullname
-            ).items():
-                annotations[attr] = (new_annotations[attr], t)
-
-        return {k: v[1] for k, v in annotations.items()}
+        self.parser.var_annotations
 
     @cached_property
     def _declarations(self) -> dict[str, tuple[str, str]]:
@@ -630,56 +514,7 @@ class Class(Namespace[type]):
 
     @cached_property
     def _member_objects(self) -> dict[str, Any]:
-        unsorted: dict[str, Any] = {}
-        for cls in self.obj.__mro__:
-            for name, obj in cls.__dict__.items():
-                unsorted.setdefault(name, obj)
-        for name in self._var_docstrings:
-            unsorted.setdefault(name, empty)
-
-        init_has_no_doc = unsorted.get("__init__", object.__init__).__doc__ in (
-            None,
-            object.__init__.__doc__,
-        )
-        if init_has_no_doc:
-            if inspect.isabstract(self.obj):
-                # Special case: We don't want to show constructors for abstract base classes unless
-                # they have a custom docstring.
-                del unsorted["__init__"]
-            elif issubclass(self.obj, enum.Enum):
-                # Special case: Do not show a constructor for enums. They are typically not constructed by users.
-                # The alternative would be showing __new__, as __call__ is too verbose.
-                del unsorted["__init__"]
-            elif issubclass(self.obj, dict):
-                # Special case: Do not show a constructor for dict subclasses.
-                del unsorted["__init__"]
-            else:
-                # Check if there's a helpful Metaclass.__call__ or Class.__new__. This dance is very similar to
-                # https://github.com/python/cpython/blob/9feae41c4f04ca27fd2c865807a5caeb50bf4fc4/Lib/inspect.py#L2359-L2376
-                call = safe_getattr(type(self.obj), "__call__", None)
-                custom_call_with_custom_docstring = (
-                        call is not None
-                        and not isinstance(call, NonUserDefinedCallables)
-                        and call.__doc__ not in (None, object.__call__.__doc__)
-                )
-                if custom_call_with_custom_docstring:
-                    unsorted["__init__"] = call
-                else:
-                    # Does our class define a custom __new__ method?
-                    new = safe_getattr(self.obj, "__new__", None)
-                    custom_new_with_custom_docstring = (
-                            new is not None
-                            and not isinstance(new, NonUserDefinedCallables)
-                            and new.__doc__ not in (None, object.__new__.__doc__)
-                    )
-                    if custom_new_with_custom_docstring:
-                        unsorted["__init__"] = new
-
-        sorted: dict[str, Any] = {}
-        for cls in self.obj.__mro__:
-            sorted, unsorted = doc_ast.sort_by_source(cls, sorted, unsorted)
-        sorted.update(unsorted)
-        return sorted
+        return self.parser.member_objects
 
     @cached_property
     def bases(self) -> list[tuple[str, str, str]]:
@@ -805,7 +640,7 @@ class Function(Doc[types.FunctionType]):
             unwrapped = func.__func__  # type: ignore
         else:
             unwrapped = func
-        super().__init__(modulename, qualname, unwrapped, taken_from)
+        super().__init__(modulename, qualname, unwrapped, taken_from, None)
         self.wrapped = func
 
     @cache
@@ -939,7 +774,7 @@ class Variable(Doc[None]):
     """
     The variable's type annotation.
 
-    If there is no type annotation, `pdoc.doc_types.empty` is used as a placeholder.
+    If there is no type annotation, `inspect_util.empty` is used as a placeholder.
     """
 
     def __init__(
@@ -960,7 +795,7 @@ class Variable(Doc[None]):
         As such, docstring, declaration location, type annotation, and the default value
         must be passed manually in the constructor.
         """
-        super().__init__(modulename, qualname, None, taken_from)
+        super().__init__(modulename, qualname, None, taken_from, None)
         # noinspection PyPropertyAccess
         self.docstring = inspect.cleandoc(docstring)
         self.annotation = annotation
