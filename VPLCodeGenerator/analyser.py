@@ -126,6 +126,12 @@ class Doc(Generic[T]):
         self.obj = obj
         self.taken_from = taken_from
         self.parser_config = parser_config
+        self.parser = self.get_parser()
+
+    def get_parser(self):
+        if self.parser_config is not None and self.type in self.parser_config.keys():
+            return self.parser_config[self.type](self.obj)
+        return None
 
     @cached_property
     def fullname(self) -> str:
@@ -380,7 +386,6 @@ class Module(Namespace[types.ModuleType]):
         Python module object.
         """
         super().__init__(module.__name__, "", module, (module.__name__, ""), parser_config)
-        self.parser = self.parser_config['module'](self.obj)
 
     @classmethod
     @cache
@@ -461,7 +466,6 @@ class Class(Namespace[type]):
     """
     def __init__(self, modulename: str, qualname: str, obj: T, taken_from: tuple[str, str], parsers: dict[str, Any]):
         super(Class, self).__init__(modulename, qualname, obj, taken_from, parsers)
-        self.parser = self.parser_config['class'](self.obj)
 
     @cache
     @_include_fullname_in_traceback
