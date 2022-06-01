@@ -44,6 +44,13 @@ class ClassA(object):
         self.attr6 = None
         return self.attr6
 
+    @classmethod
+    def classmethodinA(cls) -> bool:
+        """
+        class method docstring in Class A
+        """
+        return True
+
     class ClassC:
         attr1: None = None  #: nested class attributes comment
 
