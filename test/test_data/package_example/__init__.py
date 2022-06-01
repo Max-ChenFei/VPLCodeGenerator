@@ -99,6 +99,8 @@ class ClassB(ClassA):
         """function docstring, Overrides version from class A"""
         return self.attr6
 
+    async def async_fun(self) -> bool:
+        yield self.attr7
 
 instance_of_b = ClassB('sample_instance')  # comment, not doc comment
 

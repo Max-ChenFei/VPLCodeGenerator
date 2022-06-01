@@ -147,6 +147,7 @@ class TestSourceCodeClassParser:
                     'staticmethod': self.obj.__dict__['staticmethod'],
                     'classmethod': self.obj.__dict__['classmethod'],
                     'classmethodinA': package_example.ClassA.__dict__['classmethodinA'],
+                    'async_fun': package_example.ClassB.__dict__['async_fun'],
                     'init_attr7': self.obj.init_attr7, 'get_attr6': self.obj.get_attr6,
                     'update_attr3': self.obj.update_attr3, 'ClassC': self.obj.ClassC,
                     'attr0': empty, 'attr1': 'attr1_v', 'attr2': empty, 'attr3': empty,
