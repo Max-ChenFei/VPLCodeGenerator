@@ -74,6 +74,14 @@ class ClassB(ClassA):
     """
     attr8: ClassVar[str] = 'class attr 8'  #: This is class attr
 
+    @staticmethod
+    def staticmethod():
+        return True
+
+    @classmethod
+    def classmethod(cls):
+        return True
+
     def init_attr7(self):
         self.attr7: float = 5  #: attr7 not in __init__ function
 

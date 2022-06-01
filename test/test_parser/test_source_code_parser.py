@@ -144,6 +144,8 @@ class TestSourceCodeClassParser:
         expected = {'__init__': package_example.ClassA.__init__, '__module__': self.obj.__module__,
                     '__doc__': self.obj.__doc__, '__annotations__': self.obj.__annotations__,
                     '__dict__': self.obj.__dict__, '__weakref__': self.obj.__weakref__,
+                    'staticmethod': self.obj.__dict__['staticmethod'],
+                    'classmethod': self.obj.__dict__['classmethod'],
                     'init_attr7': self.obj.init_attr7, 'get_attr6': self.obj.get_attr6,
                     'update_attr3': self.obj.update_attr3, 'ClassC': self.obj.ClassC,
                     'attr0': empty, 'attr1': 'attr1_v', 'attr2': empty, 'attr3': empty,
