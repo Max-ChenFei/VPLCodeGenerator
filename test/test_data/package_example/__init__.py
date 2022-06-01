@@ -79,7 +79,10 @@ class ClassB(ClassA):
         return True
 
     @classmethod
-    def classmethod(cls):
+    def classmethod(cls) -> bool:
+        """
+        class method docstring
+        """
         return True
 
     def init_attr7(self):
