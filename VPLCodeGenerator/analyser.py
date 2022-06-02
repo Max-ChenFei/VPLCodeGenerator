@@ -765,6 +765,15 @@ class Function(Doc[types.FunctionType]):
             parameters=list(self.signature.parameters.values())[1:]
         )
 
+    @cached_property
+    def parameters(self) -> list[inspect.Parameter]:
+        """ Parameters without the first parameter like `self`, `cls` and `/` as well as `*`"""
+        return list(self.signature_without_self.parameters.values())
+
+    @cached_property
+    def annotations(self):
+        return self.signature.return_annotation
+
 
 class Variable(Doc[None]):
     """
