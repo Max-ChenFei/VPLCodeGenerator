@@ -605,9 +605,7 @@ class Class(Namespace[type]):
         return [
             x
             for x in self.members.values()
-            if isinstance(x, Function)
-               and not x.is_staticmethod
-               and not x.is_classmethod
+            if isinstance(x, Function) and not x.is_staticmethod and not x.is_classmethod
         ]
 
 

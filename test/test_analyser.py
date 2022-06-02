@@ -1,29 +1,31 @@
 import inspect
 import pytest
 from test_data import package_example
+# noinspection PyProtectedMember
 from VPLCodeGenerator.analyser import Variable, Function, _docstr, _cut, _PrettySignature
 from VPLCodeGenerator.inspect_util import empty
 
 
 def test_docstring_cut():
     assert _cut('docs') == 'docs'
-    assert _cut('docs'*6) == 'docs'*5 + '…'
+    assert _cut('docs' * 6) == 'docs' * 5 + '…'
 
 
 class TestVariables:
     def setup_method(self):
         self.v = Variable('package_example', 'ClassB.attr8', docstring=' This is class attr',
                           annotation=package_example.ClassB.__annotations__['attr8'], default_value='class attr 8',
-                          taken_from=['package_example.ClassB', 'attr8'])
+                          taken_from=('package_example.ClassB', 'attr8'))
 
     def test_repr(self):
         assert f'{self.v!r}' == f'<var attr8: ClassVar[str] = \'class attr 8\'{_docstr(self.v)}>'
 
     def test_is_methodvar(self):
         assert self.v.is_classvar
-        v = Variable(package_example.ClassB, 'attr3', docstring='',
+        # noinspection PyUnresolvedReferences
+        v = Variable(package_example.ClassB.__name__, 'attr3', docstring='',
                      annotation=__builtins__['float'], default_value='3',
-                     taken_from=['package_example.ClassB', 'attr3'])
+                     taken_from=('package_example.ClassB', 'attr3'))
         assert not v.is_classvar
 
     def test_full_name(self):
@@ -37,10 +39,11 @@ class TestVariables:
 
     def test_type(self):
         assert Variable.type == 'variable'
-        assert Variable('', '', docstring='', annotation='', default_value=None, taken_from=None).type == 'variable'
+        assert Variable('', '', docstring='', annotation='', default_value=None,
+                        taken_from=('', '')).type == 'variable'
 
     @pytest.mark.parametrize("actual, expected", [(package_example.ClassB.__annotations__['attr8'], ': ClassVar[str]'),
-                                                      (empty, '')])
+                                                  (empty, '')])
     def test_annotatiosn_str(self, actual, expected):
         self.v.annotation = actual
         assert self.v.annotation_str == expected
@@ -56,6 +59,7 @@ class TestVariables:
         class C:
             def __repr__(self):
                 raise Exception
+
         self.v.default_value = C()
         assert self.v.default_value_str == " = <unable to get value representation>"
 
@@ -69,12 +73,12 @@ def new_function_in(name, in_class='ClassB', taken_from_class='ClassB'):
 
 class TestFunction:
 
-    @pytest.mark.parametrize("name, func, taken_from", [('staticmethod', package_example.ClassB.__dict__['staticmethod']
-                                                         , 'ClassB'),
-                                                        ('classmethod', package_example.ClassB.__dict__['classmethod']
-                                                         , 'ClassB'),
-                                                        ('update_attr3', package_example.ClassA.__dict__['update_attr3']
-                                                         , 'ClassA')])
+    @pytest.mark.parametrize("name, func, taken_from", [('staticmethod',
+                                                         package_example.ClassB.__dict__['staticmethod'], 'ClassB'),
+                                                        ('classmethod',
+                                                         package_example.ClassB.__dict__['classmethod'], 'ClassB'),
+                                                        ('update_attr3',
+                                                         package_example.ClassA.__dict__['update_attr3'], 'ClassA')])
     def test_function_attributes(self, name, func, taken_from):
         f = new_function_in(name, taken_from, taken_from)
         assert f.wrapped == func
@@ -148,7 +152,7 @@ class TestFunction:
         assert f.signature == expected
 
     def test_signature_object_init(self):
-        f = Function('', '', object.__init__, None)
+        f = Function('', '', object.__dict__['__init__'], ('', ''))
         assert f.signature == inspect.Signature()
 
     def test_signature_without_self(self):
@@ -158,6 +162,7 @@ class TestFunction:
         expected = f.signature.replace(parameters=list(f.signature.parameters.values())[1:])
         assert f.signature_without_self == expected
 
+    # noinspection PyUnresolvedReferences
     @pytest.mark.parametrize("name, annotations, from_class", [('classmethod', __builtins__['bool'], 'ClassB'),
                                                                ('init_attr7', empty, 'ClassB'),
                                                                ('__init__', empty, 'ClassA')])
@@ -189,6 +194,6 @@ class TestFunction:
     def test_repr_function(self):
         name = 'module_level_function'
         modulename = 'package_example'
-        f = Function(modulename, name, package_example.module_level_function, (modulename, name))
+        f = Function(modulename, name, package_example.__dict__['module_level_function'], (modulename, name))
         assert repr(f) == "<function def module_level_function(arg1, arg2='default', *, arg3, **kwargs) -> float:" \
                           "  # function docstring>"

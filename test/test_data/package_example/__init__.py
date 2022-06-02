@@ -1,3 +1,4 @@
+# noinspection PyUnresolvedReferences
 import os
 from typing import ClassVar
 from .subdir import submodule_a
@@ -5,8 +6,9 @@ from . import submodule_b, subpackage
 from .subpackage import *  # import SubmoduleC
 
 # `numpy` represents the module that not imported
+# noinspection PyUnresolvedReferences
 __all__ = ['submodule_a', 'submodule_b', 'ClassA', 'SubmoduleC',
-            'numpy', 'module_level_function', 'var1', 'var2', 'instance_of_a']
+           'numpy', 'module_level_function', 'var1', 'var2', 'instance_of_a']
 
 name = 'This is a package'
 
@@ -105,6 +107,7 @@ class ClassB(ClassA):
 
     async def async_fun(self) -> bool:
         yield self.attr7
+
 
 instance_of_b = ClassB('sample_instance')  # comment, not doc comment
 

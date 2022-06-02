@@ -99,8 +99,10 @@ class TestSourceCodeModuleParser(TestSourceCodeParser):
                             'instance_of_a': attrs['instance_of_a'], 'var1': attrs['var1'],
                             'var3': attrs['var3'], 'var4': attrs['var4'], 'var5': attrs['var5'],
                             'ClassB': attrs['ClassB'], 'instance_of_b': attrs['instance_of_b'],
-                            'test_data.package_example.submodule_b': import_module('test_data.package_example.submodule_b'),
-                            'test_data.package_example.subpackage': import_module('test_data.package_example.subpackage')}
+                            'test_data.package_example.submodule_b':
+                                import_module('test_data.package_example.submodule_b'),
+                            'test_data.package_example.subpackage':
+                                import_module('test_data.package_example.subpackage')}
         for actual, expected in zip(parser.member_objects, expected_members):
             assert actual == expected
 
