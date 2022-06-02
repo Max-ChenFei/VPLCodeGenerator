@@ -658,7 +658,10 @@ class Function(Doc[types.FunctionType]):
             t = "method"
         else:
             t = "function"
-        return f"<{_decorators(self)}{t} {self.funcdef} {self.name}{self.signature}: ...{_docstr(self)}>"
+        docstr = ''
+        if _docstr(self) != '':
+            docstr = f':{_docstr(self)}'
+        return f"<{_decorators(self)}{t} {self.funcdef} {self.name}{self.signature}{docstr}>"
 
     @cached_property
     def docstring(self) -> str:
