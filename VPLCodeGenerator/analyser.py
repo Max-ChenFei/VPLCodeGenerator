@@ -719,7 +719,10 @@ class Function(Doc[types.FunctionType]):
     @cached_property
     def signature(self) -> inspect.Signature:
         """
-        The function's signature.
+        The function's signature. Example: (self, a, b, c) -> bool
+
+        function.signature.parameters don't include `/` (for Positional_Only_Argumetns) and `*` (Keyword_Only_Arguments)
+        str(function.signature) does include `/` and '*'
 
         This usually returns an instance of `_PrettySignature`, a subclass of `inspect.Signature`
         that contains pdoc-specific optimizations. For example, long argument lists are split over multiple lines
