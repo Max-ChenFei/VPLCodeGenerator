@@ -866,6 +866,7 @@ class _PrettySignature(inspect.Signature):
     MULTILINE_CUTOFF = 70
 
     def _params(self) -> list[str]:
+        """add forward slash and * in parameters list"""
         # redeclared here to keep code snipped below as-is.
         _POSITIONAL_ONLY = inspect.Parameter.POSITIONAL_ONLY
         _VAR_POSITIONAL = inspect.Parameter.VAR_POSITIONAL
