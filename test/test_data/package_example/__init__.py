@@ -11,7 +11,7 @@ __all__ = ['submodule_a', 'submodule_b', 'ClassA', 'SubmoduleC',
 name = 'This is a package'
 
 
-def module_level_function(arg1, arg2='default', *args, **kwargs) -> float:
+def module_level_function(arg1, arg2='default', *, arg3, **kwargs) -> float:
     """function docstring"""
     v = arg1 * 2
     return v
@@ -40,7 +40,7 @@ class ClassA(object):
         self.attr3 = new
         return self.attr3
 
-    def get_attr6(self):
+    def get_attr6(self, arg1, arg2, /):
         self.attr6 = None
         return self.attr6
 
@@ -86,16 +86,20 @@ class ClassB(ClassA):
         return True
 
     @classmethod
-    def classmethod(cls) -> bool:
+    def classmethod(cls, arg1: str, arg2: int, /, arg3: int = 4, *arg4, arg5: int = 4, arg6: float = 5) -> bool:
         """
-        class method docstring
+        class method docstring,
+        arg1, arg2 are positional_only arguments,
+        arg3 is positional_or_keyword argument
+        *arg4 is var_positional
+        arg5, arg6 are keyword_only_arguments
         """
         return True
 
     def init_attr7(self):
         self.attr7: float = 5  #: attr7 not in __init__ function
 
-    def get_attr6(self):
+    def get_attr6(self, arg1, arg2, /):
         """function docstring, Overrides version from class A"""
         return self.attr6
 
@@ -104,4 +108,4 @@ class ClassB(ClassA):
 
 instance_of_b = ClassB('sample_instance')  # comment, not doc comment
 
-module_level_function(2)
+module_level_function(2, arg3=4)
