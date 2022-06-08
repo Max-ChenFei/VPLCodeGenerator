@@ -211,6 +211,7 @@ class SourceCodeClassParser(SourceCodeParser):
 
     @property
     def definitions(self):
+        _ = self.member_objects
         return self._definitions
 
     @cached_property
