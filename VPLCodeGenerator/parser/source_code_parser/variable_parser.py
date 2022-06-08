@@ -1,4 +1,5 @@
 from typing import Dict, Tuple
+from VPLCodeGenerator.inspect_util import dedent
 from sphinx.pycode.parser import Parser
 
 
@@ -9,7 +10,7 @@ class VariableParser:
     """
 
     def __init__(self, code: str, encoding: str = 'utf-8') -> None:
-        self.code = code
+        self.code = dedent(code)
         self.encoding = encoding
         self.annotations: Dict[Tuple[str, str], str] = {}
         """
