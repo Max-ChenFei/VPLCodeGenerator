@@ -113,3 +113,28 @@ def is_package(obj: Any) -> bool:
           module with the name `__init__.py`.
           """
     return safe_getattr(obj, "__path__", None) is not None
+
+
+def dedent(source: str) -> str:
+    """
+    Dedent the head of a function or class definition so that it can be parsed by `ast.parse`.
+    This is an alternative to `textwrap.dedent`, which does not dedent if there are docstrings
+    without indentation. For example, this is valid Python code but would not be dedented with `textwrap.dedent`:
+
+    class Foo:
+        def bar(self):
+           '''
+    this is a docstring
+           '''
+    """
+    if not source or source[0] not in (" ", "\t"):
+        return source
+    source = source.lstrip()
+    # we may have decorators before our function definition, in which case we need to dedent a few more lines.
+    # the following heuristic should be good enough to detect if we have reached the definition.
+    # it's easy to produce examples where this fails, but this probably is not a problem in practice.
+    if not any(source.startswith(x) for x in ["async ", "def ", "class "]):
+        first_line, rest = source.split("\n", 1)
+        return first_line + "\n" + dedent(rest)
+    else:
+        return source
