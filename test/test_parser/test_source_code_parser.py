@@ -157,3 +157,28 @@ class TestSourceCodeClassParser:
                     }
         assert actual.keys() == expected.keys()
         assert actual == expected
+
+    def test_definitions(self):
+        actual = self.parser.definitions
+        expected = {'attr0': ('test_data.package_example', 'ClassA.attr0'),
+                    'attr1': ('test_data.package_example', 'ClassA.attr1'),
+                    'attr2': ('test_data.package_example', 'ClassA.attr2'),
+                    'attr3': ('test_data.package_example', 'ClassA.attr3'),
+                    'attr4': ('test_data.package_example', 'ClassA.attr4'),
+                    'attr5': ('test_data.package_example', 'ClassA.attr5'),
+                    'update_attr3': ('test_data.package_example', 'ClassA.update_attr3'),
+                    'classmethodinA': ('test_data.package_example', 'ClassA.classmethodinA'),
+                    '__weakref__': ('test_data.package_example', 'ClassA.__weakref__'),
+                    'ClassC': ('test_data.package_example', 'ClassA.ClassC'),
+                    'attr8': ('test_data.package_example', 'ClassB.attr8'),
+                    '__init__': ('test_data.package_example', 'ClassB.__init__'),
+                    '__module__': ('test_data.package_example', 'ClassB.__module__'),
+                    '__annotations__': ('test_data.package_example', 'ClassB.__annotations__'),
+                    '__doc__': ('test_data.package_example', 'ClassB.__doc__'),
+                    'staticmethod': ('test_data.package_example', 'ClassB.staticmethod'),
+                    'classmethod': ('test_data.package_example', 'ClassB.classmethod'),
+                    'init_attr7': ('test_data.package_example', 'ClassB.init_attr7'),
+                    'get_attr6': ('test_data.package_example', 'ClassB.get_attr6'),
+                    'async_fun': ('test_data.package_example', 'ClassB.async_fun'),
+                    '__dict__': ('test_data.package_example', 'ClassB.__dict__')}
+        assert actual == expected

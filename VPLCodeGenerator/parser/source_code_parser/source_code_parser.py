@@ -182,6 +182,7 @@ class SourceCodeClassParser(SourceCodeParser):
         self.namespace = self.obj.__name__
         self._var_annotations: dict[str, str] = {}
         self._var_docstring: dict[str, str] = {}
+        self._definitions: dict[str, tuple[str, str]] = {}
         self._all_var_docstring_annotations()
 
     def _all_var_docstring_annotations(self):
@@ -194,6 +195,8 @@ class SourceCodeClassParser(SourceCodeParser):
         self._variable_parser.parse()
         self._var_docstring = self._variable_parser.docstring_in_ns(self.namespace)
         self._var_annotations = self._variable_parser.annotations_in_ns(self.namespace)
+        for name in self._var_docstring.keys() | self._var_annotations.keys():
+            self._definitions.setdefault(name, (self.obj.__module__, f"{self.obj.__qualname__}.{name}"))
         # variable inherited from base class
         for cls in self.obj.__mro__[1:]:  # remove the current class
             if cls == object:
@@ -203,6 +206,12 @@ class SourceCodeClassParser(SourceCodeParser):
                 self._var_docstring.setdefault(name, docstr)
             for name, annot in p._var_annotations.items():
                 self._var_annotations.setdefault(name, annot)
+            for name in p.var_docstring.keys() | p._var_annotations.keys():
+                self._definitions.setdefault(name, (cls.__module__, f"{cls.__qualname__}.{name}"))
+
+    @property
+    def definitions(self):
+        return self._definitions
 
     @cached_property
     def var_docstring(self) -> dict[str, str]:
@@ -231,9 +240,11 @@ class SourceCodeClassParser(SourceCodeParser):
                 continue
             for name, obj in cls.__dict__.items():
                 members.setdefault(name, obj)
+                self._definitions.setdefault(name, (cls.__module__, f"{cls.__qualname__}.{name}"))
         # use value from the current class not its base class
         for attr in ['__init__', '__doc__', '__annotations__', '__dict__']:
             members[attr] = getattr(self.obj, attr)
+            self._definitions[attr] = (self.obj.__module__, f"{self.obj.__qualname__}.{attr}")
         # include variables declared in __init__ and only with annotations without assigment (not in __dict__)
         for name in self.vars_sets:
             try:
