@@ -462,7 +462,7 @@ class Module(Namespace[types.ModuleType]):
 
 class Class(Namespace[type]):
     """
-    Representation of a class's documentation.
+    Representation of a class.
     """
     def __init__(self, modulename: str, qualname: str, obj: T, taken_from: tuple[str, str], parsers: dict[str, Any]):
         super(Class, self).__init__(modulename, qualname, obj, taken_from, parsers)
@@ -471,54 +471,6 @@ class Class(Namespace[type]):
     @_include_fullname_in_traceback
     def __repr__(self):
         return f"<{_decorators(self)}class {self.modulename}.{self.qualname}{_docstr(self)}{_children(self)}>"
-
-    @cached_property
-    def docstring(self) -> str:
-        doc = Doc.docstring.__get__(self)  # type: ignore
-        if doc == dict.__doc__:
-            # Don't display default docstring for dict subclasses (primarily TypedDict).
-            return ""
-        else:
-            return doc
-
-    @cached_property
-    def _declarations(self) -> dict[str, tuple[str, str]]:
-        decls: dict[str, tuple[str, str]] = {}
-        for cls in self.obj.__mro__:
-            treeinfo = doc_ast.walk_tree(cls)
-            for name in treeinfo.docstrings.keys() | treeinfo.annotations.keys():
-                decls.setdefault(name, (cls.__module__, f"{cls.__qualname__}.{name}"))
-            for name in cls.__dict__:
-                decls.setdefault(name, (cls.__module__, f"{cls.__qualname__}.{name}"))
-        if decls.get("__init__", None) == ("builtins", "object.__init__"):
-            decls["__init__"] = (
-                self.obj.__module__,
-                f"{self.obj.__qualname__}.__init__",
-            )
-        return decls
-
-    def _taken_from(self, member_name: str, obj: Any) -> tuple[str, str]:
-        try:
-            return self._declarations[member_name]
-        except KeyError:  # pragma: no cover
-            # TypedDict botches __mro__ and may need special casing here.
-            warnings.warn(
-                f"Cannot determine where {self.fullname}.{member_name} is taken from, assuming current file."
-            )
-            return self.modulename, f"{self.qualname}.{member_name}"
-
-    @cached_property
-    def own_members(self) -> list[Doc]:
-        members = self._members_by_origin.get((self.modulename, self.qualname), [])
-        if self.taken_from != (self.modulename, self.qualname):
-            # .taken_from may be != (self.modulename, self.qualname), for example when
-            # a module re-exports a class from a private submodule.
-            members += self._members_by_origin.get(self.taken_from, [])
-        return members
-
-    @cached_property
-    def _member_objects(self) -> dict[str, Any]:
-        return self.parser.member_objects
 
     @cached_property
     def bases(self) -> list[tuple[str, str, str]]:
@@ -549,6 +501,38 @@ class Class(Namespace[type]):
         for t in doc_ast.parse(self.obj).decorator_list:
             decorators.append(f"@{doc_ast.unparse(t)}")
         return decorators
+
+    @cached_property
+    def docstring(self) -> str:
+        doc = Doc.docstring.__get__(self)  # type: ignore
+        if doc == dict.__doc__:
+            # Don't display default docstring for dict subclasses (primarily TypedDict).
+            return ""
+        else:
+            return doc
+
+    def _taken_from(self, member_name: str, obj: Any) -> tuple[str, str]:
+        try:
+            return self.parser.definitions[member_name]
+        except KeyError:  # pragma: no cover
+            # TypedDict botches __mro__ and may need special casing here.
+            warnings.warn(
+                f"Cannot determine where {self.fullname}.{member_name} is taken from, assuming current file."
+            )
+            return self.modulename, f"{self.qualname}.{member_name}"
+
+    @cached_property
+    def _member_objects(self) -> dict[str, Any]:
+        return self.parser.member_objects
+
+    @cached_property
+    def own_members(self) -> list[Doc]:
+        members = self._members_by_origin.get((self.modulename, self.qualname), [])
+        if self.taken_from != (self.modulename, self.qualname):
+            # .taken_from may be != (self.modulename, self.qualname), for example when
+            # a module re-exports a class from a private submodule.
+            members += self._members_by_origin.get(self.taken_from, [])
+        return members
 
     @cached_property
     def class_variables(self) -> list[Variable]:
