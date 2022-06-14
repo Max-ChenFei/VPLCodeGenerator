@@ -243,7 +243,7 @@ class SourceCodeClassParser(SourceCodeParser):
                 members.setdefault(name, obj)
                 self._definitions[name] = (cls.__module__, f"{cls.__qualname__}.{name}")
         # use value from the current class not its base class
-        for attr in ['__init__', '__doc__', '__annotations__', '__dict__']:
+        for attr in ['__init__', '__doc__', '__annotations__', '__dict__', '__module__']:
             members[attr] = getattr(self.obj, attr)
             self._definitions[attr] = (self.obj.__module__, f"{self.obj.__qualname__}.{attr}")
         if '__doc__' in members.keys() and members['__doc__'] is not None:
