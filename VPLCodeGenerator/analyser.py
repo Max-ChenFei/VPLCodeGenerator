@@ -839,6 +839,12 @@ class Variable(Doc[None]):
             return ""
 
 
+def equal(a: Variable | Function | Class, b: Variable | Function | Class):
+    if type(a) != type(b):
+        return False
+    return repr(a) == repr(b)
+
+
 class _PrettySignature(inspect.Signature):
     """
     A subclass of `inspect.Signature` that pads __str__ over several lines
