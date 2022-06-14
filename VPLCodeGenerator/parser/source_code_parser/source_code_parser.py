@@ -241,7 +241,7 @@ class SourceCodeClassParser(SourceCodeParser):
                 continue
             for name, obj in cls.__dict__.items():
                 members.setdefault(name, obj)
-                self._definitions.setdefault(name, (cls.__module__, f"{cls.__qualname__}.{name}"))
+                self._definitions[name] = (cls.__module__, f"{cls.__qualname__}.{name}")
         # use value from the current class not its base class
         for attr in ['__init__', '__doc__', '__annotations__', '__dict__']:
             members[attr] = getattr(self.obj, attr)
