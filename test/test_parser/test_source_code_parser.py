@@ -1,5 +1,5 @@
 import pytest
-from inspect import getsource
+from inspect import getsource, cleandoc
 from importlib import import_module
 from test_data import package_example
 from VPLCodeGenerator.parser import (obj_type, VariableParser, SourceCodeParser,
@@ -144,7 +144,7 @@ class TestSourceCodeClassParser:
     def test_member_objects(self):
         actual = self.parser.member_objects
         expected = {'__init__': package_example.ClassA.__init__, '__module__': self.obj.__module__,
-                    '__doc__': self.obj.__doc__, '__annotations__': self.obj.__annotations__,
+                    '__doc__': cleandoc(self.obj.__doc__), '__annotations__': self.obj.__annotations__,
                     '__dict__': self.obj.__dict__, '__weakref__': self.obj.__weakref__,
                     'staticmethod': self.obj.__dict__['staticmethod'],
                     'classmethod': self.obj.__dict__['classmethod'],
@@ -178,7 +178,7 @@ class TestSourceCodeClassParser:
                     'staticmethod': ('test_data.package_example', 'ClassB.staticmethod'),
                     'classmethod': ('test_data.package_example', 'ClassB.classmethod'),
                     'init_attr7': ('test_data.package_example', 'ClassB.init_attr7'),
-                    'get_attr6': ('test_data.package_example', 'ClassB.get_attr6'),
+                    'get_attr6': ('test_data.package_example', 'ClassA.get_attr6'),
                     'async_fun': ('test_data.package_example', 'ClassB.async_fun'),
                     '__dict__': ('test_data.package_example', 'ClassB.__dict__')}
         assert actual == expected
