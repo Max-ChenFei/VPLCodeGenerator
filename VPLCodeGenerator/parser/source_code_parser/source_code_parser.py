@@ -7,7 +7,7 @@ from types import ModuleType
 from typing import Any, TypeVar, Callable
 from importlib import import_module
 from functools import cached_property
-from inspect import getsource, getmodule, ismodule, isclass, isabstract
+from inspect import getsource, getmodule, ismodule, isclass, isabstract, cleandoc
 from VPLCodeGenerator.inspect_util import is_package, safe_getattr, empty, NonUserDefinedCallables
 from .variable_parser import VariableParser
 
@@ -246,6 +246,9 @@ class SourceCodeClassParser(SourceCodeParser):
         for attr in ['__init__', '__doc__', '__annotations__', '__dict__']:
             members[attr] = getattr(self.obj, attr)
             self._definitions[attr] = (self.obj.__module__, f"{self.obj.__qualname__}.{attr}")
+        if '__doc__' in members.keys() and members['__doc__'] is not None:
+            members['__doc__'] = cleandoc(members['__doc__'])
+
         # include variables declared in __init__ and only with annotations without assigment (not in __dict__)
         for name in self.vars_sets:
             try:
