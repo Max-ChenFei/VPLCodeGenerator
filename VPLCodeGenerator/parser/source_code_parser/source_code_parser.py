@@ -10,6 +10,7 @@ from functools import cached_property
 from inspect import getsource, getmodule, ismodule, isclass, isabstract, cleandoc
 from VPLCodeGenerator.inspect_util import is_package, safe_getattr, empty, NonUserDefinedCallables
 from .variable_parser import VariableParser
+from ..parser import Parser
 
 
 def obj_type(obj) -> str:
@@ -37,7 +38,7 @@ def obj_type(obj) -> str:
         raise TypeError(f'This type ({t}) of object is not supported')
 
 
-class SourceCodeParser:
+class SourceCodeParser(Parser):
     def __init__(self, obj: Any, encoding: str = 'utf-8') -> None:
         self.obj = obj
         self.type = obj_type(self.obj)
@@ -55,9 +56,6 @@ class SourceCodeParser:
     def var_annotations(self) -> dict[str, str]:
         """A mapping from member variable names to their type annotations."""
 
-    @cached_property
-    def vars_sets(self) -> set[str]:
-        return self.var_docstring.keys() | self.var_annotations.keys()
 
     @cached_property
     @abstractmethod
