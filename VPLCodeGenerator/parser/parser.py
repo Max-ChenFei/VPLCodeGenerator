@@ -24,4 +24,7 @@ class Parser(ABC):
         return self.var_docstring.keys() | self.var_annotations.keys()
 
     def definitions(self):
+        """
+            The mapping between object name to its modulename and qualname
+        """
         NotImplementedError
