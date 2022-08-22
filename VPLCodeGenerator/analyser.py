@@ -154,34 +154,6 @@ class Doc(Generic[T]):
         return safe_getdoc(self.obj)
 
     @cached_property
-    def source(self) -> str:
-        """
-        The source code of the Python object as a `str`.
-        """
-        return inspect.getsource(self.obj)
-
-    @cached_property
-    def source_file(self) -> Path | None:
-        """The name of the Python source file in which this object was defined. `None` for built-in objects."""
-        try:
-            return Path(inspect.getsourcefile(self.obj) or inspect.getfile(self.obj))  # type: ignore
-        except TypeError:
-            return None
-
-    @cached_property
-    def source_lines(self) -> tuple[int, int] | None:
-        """
-        Return a `(start, end)` line number tuple for this object.
-
-        If no source file can be found, `None` is returned.
-        """
-        try:
-            lines, start = inspect.getsourcelines(self.obj)  # type: ignore
-            return start, start + len(lines) - 1
-        except Exception:
-            return None
-
-    @cached_property
     def is_inherited(self) -> bool:
         """
         If True, the doc object is inherited from another location.
@@ -204,13 +176,6 @@ class Doc(Generic[T]):
         @property
         def type(self) -> str:  # noqa
             return self.__class__.__name__.lower()
-
-    def __lt__(self, other):
-        assert isinstance(other, Doc)
-        return self.fullname.replace("__init__", "").__lt__(
-            other.fullname.replace("__init__", "")
-        )
-
 
 class Namespace(Doc[T], metaclass=ABCMeta):
     """
