@@ -10,7 +10,7 @@ from VPLCodeGenerator.parser import ReSTParser, ReSTParserSuit
 
 def get_test_parse_suit():
     test_dir = os.path.dirname(os.path.dirname(__file__))
-    test_data_dir = os.path.join(test_dir, r'test_data\reST')
+    test_data_dir = os.path.join(test_dir, r'test_data\reST').replace("\\", "/")
     env = None
     with open(os.path.join(test_data_dir, ENV_PICKLE_FILENAME), 'rb') as f:
         env = pickle.load(f)
