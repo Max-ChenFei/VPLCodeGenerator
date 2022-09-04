@@ -1,0 +1,12 @@
+# title (reST file)
+Numpy Reference(reference/index)
+	Array objects (reference/arrays)
+		The N-dimensional array (ndarray) (reference/arrays.ndarray)
+			numpy.ndarray (reference/generated/numpy.ndarray)
+				numpy.ndarray.all (reference/generated/numpy.ndarray.all)
+		numpy.ndarray.flags (reference/generated/numpy.ndarray.flags)
+	Constants (reference/constants)
+	Routines (reference/routines)
+		Array creation routines (reference/routines.array-creation)
+			numpy.empty (reference/generated/numpy.empty)
+	
