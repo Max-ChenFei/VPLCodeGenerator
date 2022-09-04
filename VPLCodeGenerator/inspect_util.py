@@ -138,3 +138,7 @@ def dedent(source: str) -> str:
         return first_line + "\n" + dedent(rest)
     else:
         return source
+
+
+def is_constant(name: str):
+    return name == name.upper()
