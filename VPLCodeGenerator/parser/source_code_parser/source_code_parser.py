@@ -1,7 +1,12 @@
+"""
+    This parser extract definition of variable, functions, class and modueles from python objects.
+"""
 import enum
 import pkgutil
 import warnings
 import traceback
+import inspect
+import types
 from abc import abstractmethod
 from types import ModuleType
 from typing import Any, TypeVar, Callable
@@ -9,70 +14,178 @@ from importlib import import_module
 from functools import cached_property
 from inspect import getsource, getmodule, ismodule, isclass, isabstract, cleandoc
 from VPLCodeGenerator.inspect_util import is_package, safe_getattr, empty, NonUserDefinedCallables
+from VPLCodeGenerator.analyser import Doc, Module, Class, Function, Variable
 from .variable_parser import VariableParser
-from ..parser import Parser
+from ..parser import Parser, ParserSuit
+from pdoc.doc_types import resolve_annotations as pdoc_resolve_annotations, GenericAlias
+from pdoc import doc_pyi
 
 
-def obj_type(obj) -> str:
-    """
-    return `module` or 'class` and exception if not
-    Parameters
-    ----------
-    obj: Any
-        Python objects
+def resolve_annotations(obj: Any, annotations: dict[str, Any], fullname: str, ) -> dict[str, Any]:
+    # try to resolve builtin types
+    for k, v in annotations.items():
+        try:
+            annotations[k] = __builtins__[v]
+        except:
+            continue
+    # some are in __annotations__
+    for k, v in safe_getattr(obj, "__annotations__", {}).items():
+        annotations[k] = v
+    # other types
+    return pdoc_resolve_annotations(annotations, obj, fullname)
 
-    Returns
-    -------
-    type: str
-          'module' or 'class'
-    Raises
-    -------
-    Raises a Type error if the type of obj is neither `module` nor `class`.
-    """
-    if ismodule(obj):
-        return 'module'
-    elif isclass(obj):
-        return 'class'
-    else:
-        t = type(obj)
-        raise TypeError(f'This type ({t}) of object is not supported')
+
+class SourceCodeParserSuit(ParserSuit):
+    def __init__(self):
+        self.parser_types = {'default': SourceCodeModuleParser,
+                             'module': SourceCodeModuleParser,
+                             'class': SourceCodeClassParser}
+
+    @staticmethod
+    def name():
+        return 'SourceCode'
 
 
 class SourceCodeParser(Parser):
     def __init__(self, obj: Any, encoding: str = 'utf-8') -> None:
         self.obj = obj
-        self.type = obj_type(self.obj)
-        self.code = getsource(self.obj)
         self.namespace = ''
-        self._variable_parser = VariableParser(self.code, encoding)
+        code = getsource(self.obj)
+        self._variable_parser = VariableParser(code, encoding)
+        if ismodule(obj):
+            self.modulename = self.obj.__name__
+            self.qualname = ''
+        else:
+            self.modulename = self.obj.__module__
+            self.qualname = self.obj.__qualname__
 
-    @cached_property
-    @abstractmethod
+    def __eq__(self, other):
+        return type(self) == type(other) and self.obj == other.obj
+
+    def __hash__(self):
+        return hash(self.obj)
+
+    @property
     def var_docstring(self) -> dict[str, str]:
         """A mapping from member variable names to their docstrings."""
 
-    @cached_property
-    @abstractmethod
+    @property
     def var_annotations(self) -> dict[str, str]:
         """A mapping from member variable names to their type annotations."""
 
-
-    @cached_property
-    @abstractmethod
     def member_objects(self) -> dict[str, Any]:
         """A mapping from member names to their Python objects."""
+        return {}
+
+    def members(self) -> dict[str, Doc]:
+        """A mapping from all members to their documentation objects.
+
+        This mapping includes private members; they are only filtered out as part of the template logic.
+
+        """
+        members: dict[str, Doc] = {}
+        for name, obj in self.member_objects().items():
+            qualname = f"{self.qualname}.{name}".lstrip(".")
+            taken_from = self._taken_from(name, obj)
+            doc: Doc[Any]
+
+            is_classmethod = isinstance(obj, classmethod)
+            is_property = (
+                    isinstance(obj, (property, cached_property))
+                    or
+                    # Python 3.9: @classmethod @property is now allowed.
+                    is_classmethod
+                    and isinstance(obj.__func__, (property, cached_property))
+            )
+            if is_property:
+                func = obj
+                if is_classmethod:
+                    func = obj.__func__
+                if isinstance(func, property):
+                    func = func.fget
+                else:
+                    assert isinstance(func, cached_property)
+                    func = func.func
+
+                doc_f = Function(self.modulename, qualname, func, taken_from)
+                doc = Variable(
+                    self.modulename,
+                    qualname,
+                    docstring=doc_f.docstring,
+                    annotation=doc_f.signature.return_annotation,
+                    default_value=empty,
+                    taken_from=taken_from,
+                )
+            elif inspect.isroutine(obj):
+                doc = Function(self.modulename, qualname, obj, taken_from)  # type: ignore
+            elif (
+                    inspect.isclass(obj)
+                    and obj is not empty
+                    and not isinstance(obj, GenericAlias)
+            ):
+                # `dict[str,str]` is a GenericAlias instance. We want to render type aliases as variables though.
+                doc = Class(self.modulename, qualname, obj, taken_from, SourceCodeClassParser(obj))
+            elif inspect.ismodule(obj):
+                doc = Module(obj)
+            elif inspect.isdatadescriptor(obj):
+                doc = Variable(
+                    self.modulename,
+                    qualname,
+                    docstring=getattr(obj, "__doc__", None) or "",
+                    annotation=self.var_annotations.get(name, empty),
+                    default_value=empty,
+                    taken_from=taken_from,
+                )
+            else:
+                doc = Variable(
+                    self.modulename,
+                    qualname,
+                    docstring="",
+                    annotation=self.var_annotations.get(name, empty),
+                    default_value=obj,
+                    taken_from=taken_from,
+                )
+            if self.var_docstring.get(name):
+                doc.docstring = self.var_docstring[name]
+            members[doc.name] = doc
+
+        if isinstance(self, Module):
+            # quirk: doc_pyi expects .members to be set already
+            self.members = members  # type: ignore
+            doc_pyi.include_typeinfo_from_stub_files(self)
+
+        return members
+
+    def vars_sets(self) -> set[str]:
+        return self.var_docstring.keys() | self.var_annotations.keys()
 
 
 class SourceCodeModuleParser(SourceCodeParser):
     def __init__(self, obj: ModuleType, encoding: str = 'utf-8') -> None:
         super(SourceCodeModuleParser, self).__init__(obj, encoding)
 
-    @cached_property
+    def _taken_from(self, member_name: str, obj: Any) -> tuple[str, str]:
+        if obj is empty:
+            return self.modulename, f"{self.qualname}.{member_name}".lstrip(".")
+        if isinstance(obj, types.ModuleType):
+            return obj.__name__, ""
+
+        mod = safe_getattr(obj, "__module__", None)
+        qual = safe_getattr(obj, "__qualname__", None)
+        if mod and qual and "<locals>" not in qual:
+            return mod, qual
+        else:
+            # This might be wrong, but it's the best guess we have.
+            return (mod or self.modulename), f"{self.qualname}.{member_name}".lstrip(
+                "."
+            )
+
+    @property
     def var_docstring(self) -> dict[str, str]:
         self._variable_parser.parse()
         return self._variable_parser.docstring_in_ns(self.namespace)
 
-    @cached_property
+    @property
     def var_annotations(self) -> dict[str, str]:
         """
         Or __annotations__ with Python 3.10
@@ -81,9 +194,9 @@ class SourceCodeModuleParser(SourceCodeParser):
         https://docs.python.org/3/howto/annotations.html#accessing-the-annotations-dict-of-an-object-in-python-3-10-and-newer
         """
         self._variable_parser.parse()
-        return self._variable_parser.annotations_in_ns(self.namespace)
+        annotations = self._variable_parser.annotations_in_ns(self.namespace)
+        return resolve_annotations(self.obj, annotations, self.obj.__name__)
 
-    @cached_property
     def member_objects(self) -> dict[str, Any]:
         """
         A mapping from member names to their Python objects.
@@ -124,19 +237,15 @@ class SourceCodeModuleParser(SourceCodeParser):
                 # exclude variable without annotation or docstring
                 # exclude TypeVar
                 # If one needs to pickup one of these things, __all__ is the correct way.
-                include_in = name in self.vars_sets or (
+                include_in = name in self.vars_sets() or (
                         declared_in_this_module and not isinstance(obj, TypeVar)
                 )
                 if include_in:
                     members[name] = obj
             for name in self.var_docstring:
                 members.setdefault(name, empty)
-            # include submodules
-            for module in self.submodules:
-                members[module.__name__] = module
         return members
 
-    @cached_property
     def submodules(self) -> list[ModuleType]:
         """
         A list of all (direct) subdir.
@@ -181,9 +290,9 @@ class SourceCodeClassParser(SourceCodeParser):
         self._var_annotations: dict[str, str] = {}
         self._var_docstring: dict[str, str] = {}
         self._definitions: dict[str, tuple[str, str]] = {}
-        self._all_var_docstring_annotations()
+        self._var_docstring_annotations_in_inheritance_chain()
 
-    def _all_var_docstring_annotations(self):
+    def _var_docstring_annotations_in_inheritance_chain(self):
         """
         Get docstring and annotations of all variables including inherited ones.
         The variables inherited from base class and declared in __init__ can not be accessed via `class.__dict__`, so
@@ -209,22 +318,21 @@ class SourceCodeClassParser(SourceCodeParser):
 
     @property
     def definitions(self):
-        _ = self.member_objects
+        self.member_objects()
         return self._definitions
 
-    @cached_property
+    @property
     def var_docstring(self) -> dict[str, str]:
         """A mapping from member variable names to their docstrings including inherited variables."""
         return self._var_docstring
 
-    @cached_property
+    @property
     def var_annotations(self) -> dict[str, str]:
         """A mapping from member variable names to their type annotations including inherited variables.
          `__annotations__` from Python 3.10 does not inlcude inherited variables and ones in the `__init__`"""
-        return self._var_annotations
+        annotations = self._var_annotations
+        return resolve_annotations(self.obj, annotations, self.obj.__qualname__)
 
-    @cached_property
-    @abstractmethod
     def member_objects(self) -> dict[str, Any]:
         """
         A mapping from member names to their Python objects.
@@ -248,7 +356,7 @@ class SourceCodeClassParser(SourceCodeParser):
             members['__doc__'] = cleandoc(members['__doc__'])
 
         # include variables declared in __init__ and only with annotations without assigment (not in __dict__)
-        for name in self.vars_sets:
+        for name in self.vars_sets():
             try:
                 v = self.obj[name]
             except:
@@ -294,3 +402,13 @@ class SourceCodeClassParser(SourceCodeParser):
                         members["__init__"] = new
 
         return members
+
+    def _taken_from(self, member_name: str, obj: Any) -> tuple[str, str]:
+        try:
+            return self.definitions[member_name]
+        except KeyError:  # pragma: no cover
+            # TypedDict botches __mro__ and may need special casing here.
+            warnings.warn(
+                f"Cannot determine where {self.fullname}.{member_name} is taken from, assuming current file."
+            )
+            return self.modulename, f"{self.qualname}.{member_name}"

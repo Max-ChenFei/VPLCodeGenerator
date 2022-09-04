@@ -27,16 +27,10 @@ import types
 import warnings
 from abc import ABCMeta, abstractmethod
 from functools import wraps
-from pathlib import Path
 from typing import Any, ClassVar, Generic, TypeVar, Union
 from VPLCodeGenerator.inspect_util import safe_getattr, safe_getdoc, is_package
-from pdoc import doc_ast, doc_pyi, extract
-from pdoc.doc_types import (
-    GenericAlias,
-    empty,
-    safe_eval_type,
-    resolve_annotations as pdoc_resolve_annotations
-)
+from pdoc import doc_ast, extract
+from pdoc.doc_types import empty, safe_eval_type
 
 from pdoc._compat import cache, cached_property, formatannotation, get_origin
 
@@ -56,20 +50,6 @@ def _include_fullname_in_traceback(f):
             raise RuntimeError(f"Error in {self.fullname}'s repr!") from e
 
     return wrapper
-
-
-def resolve_annotations(obj: Any, annotations: dict[str, Any], fullname: str, ) -> dict[str, Any]:
-    # try to resolve builtin types
-    for k, v in annotations.items():
-        try:
-            annotations[k] = __builtins__[v]
-        except:
-            continue
-    # some are in __annotations__
-    for k, v in safe_getattr(obj, "__annotations__", {}).items():
-        annotations[k] = v
-    # other types
-    return pdoc_resolve_annotations(annotations, obj, fullname)
 
 
 T = TypeVar("T")
@@ -113,8 +93,7 @@ class Doc(Generic[T]):
     """
 
     def __init__(
-            self, modulename: str, qualname: str, obj: T, taken_from: tuple[str, str], parser_config: dict[str, object]
-    ):
+            self, modulename: str, qualname: str, obj: T, taken_from: tuple[str, str]):
         """
         Initializes a documentation object, where
         `modulename` is the name this module is defined in,
@@ -125,19 +104,12 @@ class Doc(Generic[T]):
         self.qualname = qualname
         self.obj = obj
         self.taken_from = taken_from
-        self.parser_config = parser_config
-        self.parser = self.get_parser()
-
-    def get_parser(self):
-        if self.parser_config is not None and self.type in self.parser_config.keys():
-            return self.parser_config[self.type](self.obj)
-        return None
 
     @cached_property
     def fullname(self) -> str:
         """The full qualified name of this doc object, for example `pdoc.doc.Doc`."""
         # qualname is empty for modules
-        return f"{self.modulename}.{self.qualname}".rstrip(".")
+        return f"{self.modulename}.{self.qualname}".rstrip(".").lstrip(".")
 
     @cached_property
     def name(self) -> str:
@@ -177,117 +149,52 @@ class Doc(Generic[T]):
         def type(self) -> str:  # noqa
             return self.__class__.__name__.lower()
 
+
 class Namespace(Doc[T], metaclass=ABCMeta):
     """
     A documentation object that can have children. In other words, either a module or a class.
     """
 
-    @cached_property
-    @abstractmethod
-    def _member_objects(self) -> dict[str, Any]:
+    def __init__(
+            self, modulename: str, qualname: str, obj: T, taken_from: tuple[str, str], parser=None
+    ):
         """
-        A mapping from *all* public and private member names to their Python objects.
+        Creates a documentation object given the actual
+        Python module object.
         """
+        super().__init__(modulename, qualname, obj, taken_from)
+        self.parser = parser
+
+    def __eq__(self, other):
+        return type(self) == type(other) and self.modulename == other.modulename and self.qualname == other.qualname\
+               and self.obj == other.obj and self.taken_from == other.taken_from and self.parser == other.parser
+
+    def __hash__(self):
+        return hash((self.modulename, self.qualname, self.obj, self.taken_from, self.parser))
 
     @cached_property
-    def _var_docstrings(self) -> dict[str, str]:
-        """A mapping from some member variable names to their docstrings."""
-        return self.parser.var_docstring
+    def signature_without_self(self) -> inspect.Signature:
+        """Like `signature`, but without the first argument.
+
+        This is useful to display constructors.
+        """
+        return self.signature.replace(
+            parameters=list(self.signature.parameters.values())[1:]
+        )
 
     @cached_property
-    def _var_annotations(self) -> dict[str, Any]:
-        """A mapping from some member variable names to their type annotations."""
-        annots = self.parser.var_annotations
-        return resolve_annotations(self.obj, annots, self.fullname)
+    def parameters(self) -> list[inspect.Parameter]:
+        """ Parameters without the first parameter like `self`, `cls` and `/` as well as `*`"""
+        return list(self.signature_without_self.parameters.values())
 
-    @abstractmethod
-    def _taken_from(self, member_name: str, obj: Any) -> tuple[str, str]:
-        """The location this member was taken from. If unknown, (modulename, qualname) is returned."""
+    @cached_property
+    def members(self):
+        return self.parser.members() if self.parser else []
 
     @cached_property
     @abstractmethod
     def own_members(self) -> list[Doc]:
         """A list of all own (i.e. non-inherited) members"""
-
-    @cached_property
-    def members(self) -> dict[str, Doc]:
-        """A mapping from all members to their documentation objects.
-
-        This mapping includes private members; they are only filtered out as part of the template logic.
-
-        """
-        members: dict[str, Doc] = {}
-        for name, obj in self._member_objects.items():
-            qualname = f"{self.qualname}.{name}".lstrip(".")
-            taken_from = self._taken_from(name, obj)
-            doc: Doc[Any]
-
-            is_classmethod = isinstance(obj, classmethod)
-            is_property = (
-                    isinstance(obj, (property, cached_property))
-                    or
-                    # Python 3.9: @classmethod @property is now allowed.
-                    is_classmethod
-                    and isinstance(obj.__func__, (property, cached_property))
-            )
-            if is_property:
-                func = obj
-                if is_classmethod:
-                    func = obj.__func__
-                if isinstance(func, property):
-                    func = func.fget
-                else:
-                    assert isinstance(func, cached_property)
-                    func = func.func
-
-                doc_f = Function(self.modulename, qualname, func, taken_from)
-                doc = Variable(
-                    self.modulename,
-                    qualname,
-                    docstring=doc_f.docstring,
-                    annotation=doc_f.signature.return_annotation,
-                    default_value=empty,
-                    taken_from=taken_from,
-                )
-            elif inspect.isroutine(obj):
-                doc = Function(self.modulename, qualname, obj, taken_from)  # type: ignore
-            elif (
-                    inspect.isclass(obj)
-                    and obj is not empty
-                    and not isinstance(obj, GenericAlias)
-            ):
-                # `dict[str,str]` is a GenericAlias instance. We want to render type aliases as variables though.
-                doc = Class(self.modulename, qualname, obj, taken_from, self.parser_config)
-            elif inspect.ismodule(obj):
-                doc = Module(obj, self.parser_config)
-            elif inspect.isdatadescriptor(obj):
-                doc = Variable(
-                    self.modulename,
-                    qualname,
-                    docstring=getattr(obj, "__doc__", None) or "",
-                    annotation=self._var_annotations.get(name, empty),
-                    default_value=empty,
-                    taken_from=taken_from,
-                )
-            else:
-                doc = Variable(
-                    self.modulename,
-                    qualname,
-                    docstring="",
-                    annotation=self._var_annotations.get(name, empty),
-                    default_value=obj,
-                    taken_from=taken_from,
-                )
-            if self._var_docstrings.get(name):
-                doc.docstring = self._var_docstrings[name]
-            members[doc.name] = doc
-
-        if isinstance(self, Module):
-            # quirk: doc_pyi expects .members to be set already
-            self.members = members  # type: ignore
-            doc_pyi.include_typeinfo_from_stub_files(self)
-
-        return members
 
     @cached_property
     def _members_by_origin(self) -> dict[tuple[str, str], list[Doc]]:
@@ -340,23 +247,20 @@ class Module(Namespace[types.ModuleType]):
     """
     Representation of a module's documentation.
     """
-
     def __init__(
-            self,
-            module: types.ModuleType,
-            parser_config: dict[str, Any]
+            self, modulename: str, qualname: str, obj: T, taken_from: tuple[str, str], parser=None
     ):
         """
         Creates a documentation object given the actual
         Python module object.
         """
-        super().__init__(module.__name__, "", module, (module.__name__, ""), parser_config)
+        super().__init__(modulename, qualname, obj, taken_from, parser)
 
     @classmethod
     @cache
-    def from_name(cls, name: str, parser_config: dict[str, object]) -> Module:
+    def from_name(cls, name: str) -> Module:
         """Create a `Module` object by supplying the module's (full) name."""
-        return cls(extract.load_module(name), parser_config)
+        return cls(extract.load_module(name))
 
     @cache
     @_include_fullname_in_traceback
@@ -366,30 +270,6 @@ class Module(Namespace[types.ModuleType]):
     @cached_property
     def is_package(self) -> bool:
         return is_package(self.obj)
-
-    def _taken_from(self, member_name: str, obj: Any) -> tuple[str, str]:
-        if obj is empty:
-            return self.modulename, f"{self.qualname}.{member_name}".lstrip(".")
-        if isinstance(obj, types.ModuleType):
-            return obj.__name__, ""
-
-        mod = safe_getattr(obj, "__module__", None)
-        qual = safe_getattr(obj, "__qualname__", None)
-        if mod and qual and "<locals>" not in qual:
-            return mod, qual
-        else:
-            # This might be wrong, but it's the best guess we have.
-            return (mod or self.modulename), f"{self.qualname}.{member_name}".lstrip(
-                "."
-            )
-
-    @cached_property
-    def _documented_members(self) -> set[str]:
-        return self.parser.vars_sets
-
-    @cached_property
-    def _member_objects(self) -> dict[str, Any]:
-        return self.parser.member_objects
 
     @cached_property
     def own_members(self) -> list[Doc]:
@@ -418,24 +298,46 @@ class Module(Namespace[types.ModuleType]):
 
     @cached_property
     def submodules(self) -> list[Module]:
-        """A list of all (direct) subdir."""
-        try:
-            return self.parser.submodules
-        except AttributeError:
-            raise Exception('Please use parser that can get submodules')
+        return self.parser.submodules()
 
 
 class Class(Namespace[type]):
     """
     Representation of a class.
     """
-    def __init__(self, modulename: str, qualname: str, obj: T, taken_from: tuple[str, str], parsers: dict[str, Any]):
-        super(Class, self).__init__(modulename, qualname, obj, taken_from, parsers)
+    def __init__(self, modulename: str, qualname: str, obj: T, taken_from: tuple[str, str], parser=None):
+        super(Class, self).__init__(modulename, qualname, obj, taken_from, parser)
 
     @cache
     @_include_fullname_in_traceback
     def __repr__(self):
         return f"<{_decorators(self)}class {self.modulename}.{self.qualname}{_docstr(self)}{_children(self)}>"
+
+    @cached_property
+    def signature(self) -> inspect.Signature:
+        """
+        The signature of __init__ in class. Example: (self, a, b, c) -> bool
+
+        function.signature.parameters don't include `/` (for Positional_Only_Argumetns) and `*` (Keyword_Only_Arguments)
+        str(function.signature) does include `/` and '*'
+
+        This usually returns an instance of `_PrettySignature`, a subclass of `inspect.Signature`
+        that contains pdoc-specific optimizations. For example, long argument lists are split over multiple lines
+        in repr(). Additionally, all types are already resolved.
+
+        If the signature cannot be determined, a placeholder Signature object is returned.
+        """
+        init_func = getattr(self.obj, '__init__')
+        try:
+            sig = _PrettySignature.from_callable(init_func)
+        except Exception:
+            return inspect.Signature(
+                [inspect.Parameter("unknown", inspect.Parameter.POSITIONAL_OR_KEYWORD)]
+            )
+        sig = sig.replace(return_annotation=empty)
+        for p in sig.parameters.values():
+            p._annotation = safe_eval_type(p.annotation, globalns, mod, self.fullname)  # type: ignore
+        return sig
 
     @cached_property
     def bases(self) -> list[tuple[str, str, str]]:
@@ -475,20 +377,6 @@ class Class(Namespace[type]):
             return ""
         else:
             return doc
-
-    def _taken_from(self, member_name: str, obj: Any) -> tuple[str, str]:
-        try:
-            return self.parser.definitions[member_name]
-        except KeyError:  # pragma: no cover
-            # TypedDict botches __mro__ and may need special casing here.
-            warnings.warn(
-                f"Cannot determine where {self.fullname}.{member_name} is taken from, assuming current file."
-            )
-            return self.modulename, f"{self.qualname}.{member_name}"
-
-    @cached_property
-    def _member_objects(self) -> dict[str, Any]:
-        return self.parser.member_objects
 
     @cached_property
     def own_members(self) -> list[Doc]:
@@ -591,8 +479,16 @@ class Function(Doc[types.FunctionType]):
             unwrapped = func.__func__  # type: ignore
         else:
             unwrapped = func
-        super().__init__(modulename, qualname, unwrapped, taken_from, None)
+        super().__init__(modulename, qualname, unwrapped, taken_from)
         self.wrapped = func
+
+    def __eq__(self, other):
+        return type(other) == Function and self.modulename == other.modulename \
+               and self.qualname == other.qualname and self.wrapped == other.wrapped \
+               and self.taken_from == other.taken_from
+
+    def __hash__(self):
+        return hash((self.modulename, self.qualname, self.wrapped, self.taken_from))
 
     @cache
     @_include_fullname_in_traceback
@@ -752,6 +648,7 @@ class Variable(Doc[None]):
             docstring: str,
             annotation: type | empty = empty,
             default_value: Any | empty = empty,
+            is_const: bool = True
     ):
         """
         Construct a variable doc object.
@@ -761,11 +658,20 @@ class Variable(Doc[None]):
         As such, docstring, declaration location, type annotation, and the default value
         must be passed manually in the constructor.
         """
-        super().__init__(modulename, qualname, None, taken_from, None)
+        super().__init__(modulename, qualname, None, taken_from)
         # noinspection PyPropertyAccess
         self.docstring = inspect.cleandoc(docstring)
         self.annotation = annotation
         self.default_value = default_value
+        self.is_const = is_const
+
+    def __eq__(self, other):
+        return type(other) == Variable and self.modulename == other.modulename \
+               and self.qualname == other.qualname and self.taken_from == other.taken_from \
+               and self.default_value == other.default_value
+
+    def __hash__(self):
+        return hash((self.modulename, self.qualname, self.default_value, self.taken_from))
 
     @cache
     @_include_fullname_in_traceback
@@ -802,12 +708,6 @@ class Variable(Doc[None]):
             return f": {formatannotation(self.annotation)}"
         else:
             return ""
-
-
-def equal(a: Variable | Function | Class, b: Variable | Function | Class):
-    if type(a) != type(b):
-        return False
-    return repr(a) == repr(b)
 
 
 class _PrettySignature(inspect.Signature):
@@ -901,7 +801,8 @@ def _docstr(doc: Doc) -> str:
     """helper function for Doc.__repr__()"""
     docstr = []
     if doc.is_inherited:
-        docstr.append(f"inherited from {'.'.join(doc.taken_from).rstrip('.')}")
+        if doc.taken_from:
+            docstr.append(f"inherited from {'.'.join(doc.taken_from).rstrip('.')}")
     if doc.docstring:
         docstr.append(_cut(doc.docstring))
     if docstr:
