@@ -3,7 +3,7 @@ import pytest
 from typing import ClassVar
 from test_data import package_example
 # noinspection PyProtectedMember
-from VPLCodeGenerator.analyser import Variable, Function, Class, equal, _docstr, _cut, _PrettySignature
+from VPLCodeGenerator.analyser import Variable, Function, Class, _docstr, _cut, _PrettySignature
 from VPLCodeGenerator.inspect_util import empty
 from VPLCodeGenerator.parser import SourceCodeClassParser
 
@@ -87,7 +87,6 @@ class TestFunction:
         if isinstance(func, (classmethod, staticmethod)):
             func = func.__func__
         assert f.obj == func
-        assert f.parser_config is None
         assert f.taken_from == ('package_example', f'{taken_from}.{name}')
 
     def test_full_name(self):
@@ -211,7 +210,7 @@ class TestClass:
     classB = package_example.ClassB
     submoduleC = package_example.SubmoduleC
     submoduleB = package_example.submodule_b.SubmoduleB
-    parsers = {'class': SourceCodeClassParser}
+    parser_class = SourceCodeClassParser
 
     @pytest.mark.parametrize("obj, modulename, base", [(classA, '', []),
                                                        (classB, classB.__module__,
@@ -220,19 +219,19 @@ class TestClass:
                                                         [(submoduleB.__module__, 'SubmoduleB',
                                                           f"{submoduleB.__module__}.SubmoduleB")])])
     def test_base(self, obj, modulename, base):
-        parsers = {'class': SourceCodeClassParser}
-        c = Class(modulename, '', obj, ('', ''), parsers)
+        c = Class(modulename, '', obj, ('', ''), self.parser_class(obj))
         assert c.bases == base
 
     def setup_method(self):
         modulename = package_example.ClassB.__module__
-        self.c = Class(modulename, 'ClassB', self.classB, (modulename, 'ClassB'), self.parsers)
+        self.c = Class(modulename, 'ClassB', self.classB, (modulename, 'ClassB'),
+                       self.parser_class(self.classB))
 
     def test_base_object(self):
         modulename = package_example.__name__
         qualname = package_example.ClassB.__qualname__
         obj = package_example.ClassB
-        c = Class(modulename, qualname, obj, (modulename, qualname), self.parsers)
+        c = Class(modulename, qualname, obj, (modulename, qualname), self.parser_class(obj))
         assert c.bases == [(modulename, package_example.ClassA.__name__, package_example.ClassA.__name__)]
 
     def test_decorators(self):
@@ -247,9 +246,6 @@ class TestClass:
 
         c = Class('', '', DictSubclass(), ('', ''), None)
         assert c.docstring == ''
-
-    def test_taken_from(self):
-        assert self.c._taken_from('test', None) == ('test_data.package_example', 'ClassB.test')
 
     @pytest.fixture
     def expected_members(self):
@@ -287,7 +283,8 @@ class TestClass:
                                            package_example.ClassA.__dict__['classmethodinA'],
                                            ('test_data.package_example', 'ClassA.classmethodinA')),
                 'ClassC': Class('test_data.package_example', 'ClassB.ClassC', package_example.ClassB.ClassC,
-                                ('test_data.package_example', 'ClassA.ClassC'), self.parsers),
+                                ('test_data.package_example', 'ClassA.ClassC'),
+                                self.parser_class(package_example.ClassB.ClassC)),
                 'staticmethod': Function('test_data.package_example', 'ClassB.staticmethod',
                                          package_example.ClassB.__dict__['staticmethod'],
                                          ('test_data.package_example', 'ClassB.staticmethod')),
@@ -396,8 +393,8 @@ class TestClass:
                                            package_example.ClassA.__dict__['classmethodinA'],
                                            ('test_data.package_example', 'ClassA.classmethodinA')),
                 'ClassC': Class('test_data.package_example', 'ClassB.ClassC', package_example.ClassB.ClassC,
-                                ('test_data.package_example', 'ClassA.ClassC'), self.parsers),
-
+                                ('test_data.package_example', 'ClassA.ClassC'),
+                                self.parser_class(package_example.ClassB.ClassC)),
                 'get_attr6': Function('test_data.package_example', 'ClassB.get_attr6',
                                       package_example.ClassB.get_attr6,
                                       ('test_data.package_example', 'ClassA.get_attr6')),
@@ -408,20 +405,16 @@ class TestClass:
 
     def test_members(self, expected_members):
         actual = self.c.members
-        expected = expected_members
-        for k in actual.keys():
-            assert equal(actual[k], expected[k])
+        assert actual == expected_members
 
     def test_own_members(self, own_members):
         actual = self.c.own_members
-        expected = own_members
-        for m in actual:
-            assert equal(m, expected[m.name])
+        assert {i.name: i for i in actual} == own_members
 
     def test_inherited_members(self, inherited_members):
         actual = self.c.inherited_members
         for m in actual[('test_data.package_example', 'ClassA')]:
-            assert equal(m, inherited_members[m.name])
+            assert m == inherited_members[m.name]
 
     def test_class_variables(self):
         actual = self.c.class_variables
@@ -430,7 +423,7 @@ class TestClass:
                             docstring='This is class attr',
                             annotation=ClassVar[str],
                             default_value='class attr 8')
-        assert equal(actual[0], expected)
+        assert actual[0] == expected
 
     def test_instance_variables(self, expected_members):
         actual = self.c.instance_variables
@@ -440,7 +433,7 @@ class TestClass:
                 variables[m.name] = m
         assert len(actual) == len(variables)
         for v in actual:
-            assert equal(v, variables[v.name])
+            assert v == variables[v.name]
 
     def test_methods(self, expected_members):
         actual = self.c.methods
@@ -451,7 +444,7 @@ class TestClass:
         }
         assert len(actual) == len(expectd)
         for f in actual:
-            assert equal(f, expectd[f.name])
+            assert f == expectd[f.name]
 
     def test_classmethods(self, expected_members):
         actual = self.c.classmethods
@@ -462,7 +455,7 @@ class TestClass:
         }
         assert len(actual) == len(expectd)
         for f in actual:
-            assert equal(f, expectd[f.name])
+            assert f == expectd[f.name]
 
     def test_staticmethods(self, expected_members):
         actual = self.c.staticmethods
@@ -473,4 +466,4 @@ class TestClass:
         }
         assert len(actual) == len(expectd)
         for f in actual:
-            assert equal(f, expectd[f.name])
+            assert f == expectd[f.name]
