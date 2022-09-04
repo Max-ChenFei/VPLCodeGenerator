@@ -2,26 +2,9 @@ import pytest
 from inspect import getsource, cleandoc
 from importlib import import_module
 from test_data import package_example
-from VPLCodeGenerator.parser import (obj_type, VariableParser, SourceCodeParser,
-                                     SourceCodeModuleParser, SourceCodeClassParser)
+from VPLCodeGenerator.parser import (VariableParser, SourceCodeParser,
+                                     SourceCodeModuleParser, SourceCodeClassParser, resolve_annotations)
 from VPLCodeGenerator.inspect_util import empty
-
-
-def test_obj_type():
-    assert obj_type(package_example) == 'module'
-    assert obj_type(package_example.subpackage.SubmoduleC) == 'class'
-
-
-@pytest.mark.parametrize("test_input, expected", [(package_example.name,
-                                                   f'This type ({type(package_example.name)}) '
-                                                   f'of object is not supported'),
-                                                  (package_example.subpackage.SubmoduleC.myname,
-                                                   f'This type ({type(package_example.subpackage.SubmoduleC.myname)})'
-                                                   f' of object is not supported')])
-def test_obj_type_exception(test_input, expected):
-    with pytest.raises(TypeError) as excinfo:
-        obj_type(test_input)
-        assert str(excinfo.value) == expected
 
 
 class TestSourceCodeParser:
@@ -34,17 +17,18 @@ class TestSourceCodeParser:
 
     def test_attribute_assignment_in_init(self):
         assert self.parser.obj == self.obj
-        assert self.parser.type == obj_type(self.obj)
-        assert self.parser.code == self.code
         assert self.parser.namespace == ''
         assert self.parser._variable_parser == VariableParser(self.code, self.encoding)
 
     def test_vars_sets(self, mocker):
         var_docstr = {'var1': 'doc1', 'var2': 'doc1'}
         var_annots = {'var1': 'doc1', 'var3': 'doc1'}
-        mocker.patch.object(self.parser, 'var_docstring', var_docstr)
-        mocker.patch.object(self.parser, 'var_annotations', var_annots)
-        assert self.parser.vars_sets == var_docstr.keys() | var_annots.keys()
+        mocker.patch(f'{SourceCodeParser.__module__}.{SourceCodeParser.__name__}.var_docstring',
+                     new_callable=mocker.PropertyMock, return_value=var_docstr)
+        mocker.patch(f'{SourceCodeParser.__module__}.{SourceCodeParser.__name__}.var_annotations',
+                     new_callable=mocker.PropertyMock, return_value=var_annots)
+        self.parser = SourceCodeParser(self.obj, self.encoding)
+        assert self.parser.vars_sets() == var_docstr.keys() | var_annots.keys()
 
 
 class TestSourceCodeModuleParser(TestSourceCodeParser):
@@ -58,14 +42,15 @@ class TestSourceCodeModuleParser(TestSourceCodeParser):
         assert self.parser.var_docstring == expected
 
     def test_var_annotations(self):
-        expected: dict[str, str] = VariableParser(self.code, self.encoding).annotations_in_ns(self.parser.namespace)
+        annotations: dict[str, str] = VariableParser(self.code, self.encoding).annotations_in_ns(self.parser.namespace)
+        expected = resolve_annotations(self.obj, annotations, self.obj.__name__)
         if expected is None or expected == {}:
             raise Exception('No var annotations found, please use other test data')
         assert self.parser.var_annotations == expected
 
     def test_submodules_when_have_all_attr(self):
         expected_modules = [package_example.submodule_b]
-        for actual, expected in zip(self.parser.submodules, expected_modules):
+        for actual, expected in zip(self.parser.submodules(), expected_modules):
             assert actual == expected
 
     def test_submodules_when_no_all_attr(self):
@@ -73,20 +58,20 @@ class TestSourceCodeModuleParser(TestSourceCodeParser):
         del self.obj.__all__
         parser = SourceCodeModuleParser(self.obj, self.encoding)
         expected_modules = [package_example.submodule_b, package_example.subpackage]
-        for actual, expected in zip(parser.submodules, expected_modules):
+        for actual, expected in zip(parser.submodules(), expected_modules):
             assert actual == expected
         self.obj.__all__ = all_attr
 
     def test_submodules_return_empty(self):
         self.parser = SourceCodeModuleParser(self.obj.submodule_a, self.encoding)
-        assert self.parser.submodules == []
+        assert self.parser.submodules() == []
 
     def test_member_objects_when_have_all_attr(self):
         attrs = self.obj.__dict__
         import numpy
         expected = [attrs['submodule_a'], attrs['submodule_b'], attrs['ClassA'], attrs['SubmoduleC'],
                     numpy, attrs['module_level_function'], attrs['var1'], empty, attrs['instance_of_a']]
-        for n, v, actual in zip(self.obj.__all__, expected, self.parser.member_objects.items()):
+        for n, v, actual in zip(self.obj.__all__, expected, self.parser.member_objects().items()):
             assert actual[0] == n
             assert actual[1] == v
 
@@ -103,7 +88,7 @@ class TestSourceCodeModuleParser(TestSourceCodeParser):
                                 import_module('test_data.package_example.submodule_b'),
                             'test_data.package_example.subpackage':
                                 import_module('test_data.package_example.subpackage')}
-        for actual, expected in zip(parser.member_objects, expected_members):
+        for actual, expected in zip(parser.member_objects(), expected_members):
             assert actual == expected
 
         self.obj.__all__ = all_attr
@@ -119,8 +104,6 @@ class TestSourceCodeClassParser:
 
     def test_attribute_assignment_in_init(self):
         assert self.parser.obj == self.obj
-        assert self.parser.type == obj_type(self.obj)
-        assert self.parser.code == self.code
         assert self.parser.namespace == self.obj.__name__
 
     def test_var_docstring(self):
@@ -135,14 +118,14 @@ class TestSourceCodeClassParser:
     def test_var_annotations(self):
         obj = package_example.ClassA
         p = VariableParser(getsource(obj), self.encoding)
-        expected: dict[str, str] = p.annotations_in_ns(obj.__name__)
-        expected['attr8'] = 'ClassVar[str]'
+        annotations: dict[str, str] = p.annotations_in_ns(obj.__name__)
+        expected = resolve_annotations(self.obj, annotations, self.obj.__name__)
         if expected is None or expected == {}:
             raise Exception('No var annotations found, please use other test data')
         assert self.parser.var_annotations == expected
 
     def test_member_objects(self):
-        actual = self.parser.member_objects
+        actual = self.parser.member_objects()
         expected = {'__init__': package_example.ClassA.__init__, '__module__': self.obj.__module__,
                     '__doc__': cleandoc(self.obj.__doc__), '__annotations__': self.obj.__annotations__,
                     '__dict__': self.obj.__dict__, '__weakref__': self.obj.__weakref__,
